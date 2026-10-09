@@ -1,12 +1,12 @@
 # Roadmap
 
-| Phase | Theme                         | Outcome for the user                                                  | Status    |
-| ----- | ----------------------------- | --------------------------------------------------------------------- | --------- |
-| 0     | Foundation                    | Browse a deck of popular movies in Ukrainian or English               | Done      |
-| 1     | Swipes, accounts, library     | Swipe to sort movies; decisions are saved; a personal library         | In design |
-| 2     | Recommendations               | "What to watch next", filterable by genre, with explanations          | Planned   |
-| 3     | Notifications                 | Watchlist titles becoming available, relevant releases, a weekly pick | Planned   |
-| 4     | Collaborative recommendations | "People with similar taste also loved…"                               | Planned   |
+| Phase | Theme                         | Outcome for the user                                                  | Status      |
+| ----- | ----------------------------- | --------------------------------------------------------------------- | ----------- |
+| 0     | Foundation                    | Browse a deck of popular movies in Ukrainian or English               | Done        |
+| 1     | Swipes, accounts, library     | Swipe to sort movies; decisions are saved; a personal library         | In progress |
+| 2     | Recommendations               | "What to watch next", filterable by genre, with explanations          | Planned     |
+| 3     | Notifications                 | Watchlist titles becoming available, relevant releases, a weekly pick | Planned     |
+| 4     | Collaborative recommendations | "People with similar taste also loved…"                               | Planned     |
 
 ## Phase 1 — Swipes, accounts, library
 

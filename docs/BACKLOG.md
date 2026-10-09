@@ -32,6 +32,11 @@ Known follow-ups, deliberately deferred. Code that depends on an item references
   the Expo fix.
 - Consider a 3–7 day `minimumReleaseAge` for production dependencies.
 
+## Before store release
+
+- **Name clearance for "Reelmark"**: trademark search (USPTO, EUIPO, Ukrainian IP office), App Store
+  / Google Play name availability, domain and social handles.
+
 ## Polish
 
 - TMDB logo on the About screen (TMDB attribution guidelines).
