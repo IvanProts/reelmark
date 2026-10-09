@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512" role="img" aria-label="Reelmark">
+  <title>Reelmark</title>
+  <!-- App icon source. A film strip cut into a bookmark, with a check for "seen".
+       Body 32×48 units, centred on a 64-unit grid; holes use the even-odd fill rule. -->
+  <path fill="#F5B544" fill-rule="evenodd"
+        d="M20 8H44A4 4 0 0 1 48 12V56L32 46L16 56V12A4 4 0 0 1 20 8Z
+             M19 14A1 1 0 0 1 20 13H22A1 1 0 0 1 23 14V17A1 1 0 0 1 22 18H20A1 1 0 0 1 19 17Z
+             M19 22A1 1 0 0 1 20 21H22A1 1 0 0 1 23 22V25A1 1 0 0 1 22 26H20A1 1 0 0 1 19 25Z
+             M19 30A1 1 0 0 1 20 29H22A1 1 0 0 1 23 30V33A1 1 0 0 1 22 34H20A1 1 0 0 1 19 33Z
+             M19 38A1 1 0 0 1 20 37H22A1 1 0 0 1 23 38V41A1 1 0 0 1 22 42H20A1 1 0 0 1 19 41Z
+             M41 14A1 1 0 0 1 42 13H44A1 1 0 0 1 45 14V17A1 1 0 0 1 44 18H42A1 1 0 0 1 41 17Z
+             M41 22A1 1 0 0 1 42 21H44A1 1 0 0 1 45 22V25A1 1 0 0 1 44 26H42A1 1 0 0 1 41 25Z
+             M41 30A1 1 0 0 1 42 29H44A1 1 0 0 1 45 30V33A1 1 0 0 1 44 34H42A1 1 0 0 1 41 33Z
+             M41 38A1 1 0 0 1 42 37H44A1 1 0 0 1 45 38V41A1 1 0 0 1 44 42H42A1 1 0 0 1 41 41Z
+             M25.37 28.63L30.58 33.84L38.7 24.55A1.6 1.6 0 0 0 36.3 22.45L30.42 29.16L27.63 26.37A1.6 1.6 0 0 0 25.37 28.63Z"/>
+</svg>
