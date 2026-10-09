@@ -19,6 +19,20 @@ jobs:
     name: Format, lint, typecheck, test
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    services:
+      # Same image and test credentials as the local compose setup
+      # (infra/postgres/init); the e2e suites use this throwaway database.
+      postgres:
+        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        env:
+          POSTGRES_USER: reelmark_test
+          POSTGRES_PASSWORD: reelmark_test
+          POSTGRES_DB: reelmark_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reelmark_test -d reelmark_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
