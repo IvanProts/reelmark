@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { intParam } from './primitives.js';
+
 /**
  * Languages the app supports — for both UI copy and movie data.
  * Adding a language = add its code here, a UI translation file in the app,
@@ -34,26 +36,13 @@ export type MovieCard = z.infer<typeof MovieCardSchema>;
 
 /** TMDB serves at most 500 pages. */
 export const MAX_DECK_PAGE = 500;
-const PageNumber = z.number().int().min(1).max(MAX_DECK_PAGE);
 
 /**
- * Query of `GET /api/v1/movies/deck`. Unknown keys are stripped.
- *
- * Query strings arrive as text, so `page` accepts a plain decimal string
- * ("7") as well as a number — but not "0x7", "7.0", " 7" or "007": one page,
- * one spelling (matters once responses are cached).
+ * Query of `GET /api/v1/movies/deck`. Unknown keys are stripped. The deck
+ * excludes movies the signed-in user has already sorted.
  */
 export const DeckQuerySchema = z.object({
-  page: z
-    .union([
-      PageNumber,
-      z
-        .string()
-        .regex(/^[1-9]\d{0,2}$/)
-        .transform(Number)
-        .pipe(PageNumber),
-    ])
-    .default(1),
+  page: intParam(1, MAX_DECK_PAGE).default(1),
   lang: LocaleSchema.default(DEFAULT_LOCALE),
 });
 export type DeckQuery = z.infer<typeof DeckQuerySchema>;

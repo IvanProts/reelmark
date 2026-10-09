@@ -139,7 +139,7 @@ describe('GET /api/v1/movies/deck', () => {
 
   // One example per kind of invalid input; the security suite covers many more.
   it.each([
-    ['page=0', 'Invalid request. page: Invalid input'],
+    ['page=0', 'Invalid request. page: Too small: expected number to be >=1'],
     ['page=0x10', 'Invalid request. page: Invalid input'],
     ['lang=ru', 'Invalid request. lang: Invalid option: expected one of "uk"|"en"'],
   ])('rejects %s with 400 and a message naming the field', async (query, message) => {
