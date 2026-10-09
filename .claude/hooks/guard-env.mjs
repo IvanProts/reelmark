@@ -41,8 +41,10 @@ function check(command) {
   // 1) Names an env file: .env, .env.local, prod.env, .envrc, .env_backup …
   if (/\.env(?:rc)?(?:\b|[_-])|--env-file|\bdotenv\b/i.test(cleaned)) return REASON_FILE;
 
-  // 2) A glob that could expand to an env file: .e*, .en?, .[e]nv, .*
-  if (/(?:^|[\s/'"=])\.(?:e(?:n)?)?[*?[]/.test(cleaned)) return REASON_FILE;
+  // 2) A glob that could expand to an env file: .e*, .en?, .*, or a bracket class that could match
+  //    "e"/"n" (.[e]nv, .[a-z]nv, .[!x]nv). Brackets like jq's .[0] can't match and are allowed.
+  if (/(?:^|[\s/'"=])\.(?:e(?:n)?)?[*?]/.test(cleaned)) return REASON_FILE;
+  if (/(?:^|[\s/'"=])\.(?:e(?:n)?)?\[[^\]]*[eEnN!^-][^\]]*\]/.test(cleaned)) return REASON_FILE;
 
   // 3) Recursive search: walks folders and reads every file in them,
   //    including .env, without the command ever naming it.

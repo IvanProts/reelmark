@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/IvanProts/reelmark/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/IvanProts/reelmark/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="iOS and Android" src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-0B0B0F">
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white">
   <img alt="NestJS 12" src="https://img.shields.io/badge/NestJS-12-E0234E?logo=nestjs&logoColor=white">
