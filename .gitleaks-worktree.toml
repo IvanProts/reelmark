@@ -1,0 +1,19 @@
+# Config for `pnpm security:secrets` — a gitleaks scan of the working tree.
+#
+# Unlike the pre-commit hook (which only sees staged changes and uses
+# gitleaks' strict defaults), a working-tree scan also reads git-ignored
+# files — including the real apps/api/.env, which is SUPPOSED to hold secrets.
+# Skip exactly those local env files here; everything else (including the
+# committed *.env.example templates) is still scanned with the default rules.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Git-ignored local env files hold real secrets by design"
+paths = [
+  '''(^|/)\.env$''',
+  '''(^|/)\.env\.local$''',
+  '''(^|/)\.env\.[^/]+\.local$''',
+  '''(^|/)\.env\.(development|production|staging|test)$''',
+]

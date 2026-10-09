@@ -1,0 +1,53 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Expo's recommended linker for monorepos: guarantees a single copy of
+# react-native in the bundle (isolated installs can load two).
+nodeLinker: hoisted
+
+# ── Supply-chain protection ───────────────────────────────────────
+# Most of these are already pnpm 12 defaults; they are written out
+# explicitly so the intent is visible and can't silently change.
+
+# Don't install versions published less than 24h ago. Compromised
+# releases are usually detected and pulled within hours.
+minimumReleaseAge: 1440
+
+# Fail if a package's publishing trust level drops (e.g. a release
+# suddenly published without provenance — a sign of a stolen token).
+trustPolicy: no-downgrade
+# ...but only for releases younger than 30 days: that's the window in
+# which a takeover goes unnoticed. Older versions predate provenance
+# (e.g. undici@6.20.1 from 2024) and would be false alarms.
+trustPolicyIgnoreAfter: 43200
+# Expo moved canary/SDK 58 to signed (provenance) publishing, but stable
+# SDK 57 patches are still published unsigned by the same maintainers —
+# so every SDK 57 release looks like a "downgrade". For these packages the
+# check carries no signal; they stay covered by minimumReleaseAge.
+# Revisit (remove) after upgrading to SDK 58.
+trustPolicyExclude:
+  - expo
+  - 'expo-*'
+  - '@expo/*'
+  # Expo's Babel preset, published from github.com/expo/expo with each SDK patch
+  - babel-preset-expo
+
+# Only direct dependencies may come from git URLs / tarballs.
+blockExoticSubdeps: true
+
+# Dependency install scripts (postinstall etc.) are blocked unless
+# reviewed and listed here; installs fail on unreviewed ones.
+strictDepBuilds: true
+allowBuilds: {}
+
+# ── Known advisories without a fix, reviewed and accepted ─────────
+# CI fails on any NEW high/critical advisory. Each entry below is
+# build-time tooling only (never shipped in the app or the API) and
+# has no patched version yet. Re-check on every Expo SDK upgrade.
+auditConfig:
+  ignoreGhsas:
+    # node-forge via @expo/cli → @expo/code-signing-certificates (CLI-only)
+    - GHSA-86w9-cpqp-85rv
+    # braces via react-native → metro → micromatch (bundler-only)
+    - GHSA-vfj7-8cjw-p6xm

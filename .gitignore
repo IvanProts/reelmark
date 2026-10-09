@@ -1,0 +1,28 @@
+# ── Secrets: never commit ─────────────────────────────────────────
+# Real values live only in .env files on your machine / in the hosting
+# provider's secret store. Only the *.example templates are committed.
+.env
+.env.*
+*.env
+.envrc
+!.env.example
+# npm/pnpm registry auth tokens; our pnpm settings live in pnpm-workspace.yaml
+.npmrc
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+
+# ── Dependencies & build output ───────────────────────────────────
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# ── Tooling ───────────────────────────────────────────────────────
+.DS_Store
+.claude/settings.local.json

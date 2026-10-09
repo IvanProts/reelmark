@@ -1,0 +1,29 @@
+#!/bin/sh
+# Blocks commits that would leak secrets. Runs automatically on `git commit`
+# (the file must stay executable — git silently skips non-executable hooks).
+set -eu
+
+# Staged file names: NUL-separated and unquoted (core.quotePath=false), so
+# unusual characters (spaces, non-ASCII, quotes) can't hide a name from the
+# check below.
+staged=$(git -c core.quotePath=false diff --cached --name-only -z \
+  --diff-filter=ACMR | tr '\0' '\n')
+
+# 1) Never commit env files: .env, .env.*, *.env, .envrc.
+#    Only *.env.example templates (placeholders, no real values) are allowed.
+blocked=$(printf '%s\n' "$staged" \
+  | grep -E '(^|/)(\.env($|\.)|[^/]+\.env$|\.envrc$)' \
+  | grep -vE '\.env\.example$' || true)
+if [ -n "$blocked" ]; then
+  echo "✋ Commit blocked: these files may contain secrets:"
+  printf '%s\n' "$blocked"
+  echo "Unstage them with: git rm --cached <file>"
+  exit 1
+fi
+
+# 2) Scan the staged changes for anything that looks like a key/token.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "✋ Commit blocked: gitleaks is not installed (brew install gitleaks)."
+  exit 1
+fi
+gitleaks git --pre-commit --staged --redact --no-banner
