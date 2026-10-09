@@ -1,0 +1,27 @@
+# Local development database. Start: `pnpm db:up` · stop: `pnpm db:down`.
+# Credentials come from the git-ignored root env file (`pnpm setup:env` creates it).
+name: reelmark
+
+services:
+  postgres:
+    # Official image, pinned by digest so the exact build can't change underneath us.
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: reelmark
+      POSTGRES_DB: reelmark
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run `pnpm setup:env` first}
+    ports:
+      # Bound to localhost only: the database is never reachable from the network.
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U reelmark -d reelmark']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:
