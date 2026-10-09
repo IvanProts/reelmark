@@ -39,7 +39,13 @@ blockExoticSubdeps: true
 # Dependency install scripts (postinstall etc.) are blocked unless
 # reviewed and listed here; installs fail on unreviewed ones.
 strictDepBuilds: true
-allowBuilds: {}
+# Reviewed install scripts, allowed for these exact versions only (re-review on upgrade):
+allowBuilds:
+  # preinstall: checks the Node.js version
+  prisma@7.10.0: true
+  # postinstall: downloads Prisma's schema engine (used by migrations) from
+  # Prisma's CDN; published by GitHub Actions with SLSA provenance
+  '@prisma/engines@7.10.0': true
 
 # ── Known advisories without a fix, reviewed and accepted ─────────
 # CI fails on any NEW high/critical advisory. Each entry below is
