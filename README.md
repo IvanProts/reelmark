@@ -97,6 +97,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - Node.js 24 (see `.nvmrc`) and pnpm via Corepack: `corepack enable pnpm`
 - [gitleaks](https://github.com/gitleaks/gitleaks) for the pre-commit hook: `brew install gitleaks`
+- Docker for the local database ([OrbStack](https://orbstack.dev) or Docker Desktop)
 - Xcode with an iOS Simulator and/or Android Studio with an emulator
 - A free TMDB account and an **API Read Access Token**
   ([Settings → API](https://www.themoviedb.org/settings/api))
@@ -105,9 +106,12 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```sh
 pnpm install
-cp apps/api/.env.example apps/api/.env        # then set TMDB_ACCESS_TOKEN
-cp apps/mobile/.env.example apps/mobile/.env  # API URL for simulator / emulator / device
+pnpm setup:env   # creates the env files and generates local secrets (never printed)
+pnpm db:up       # local PostgreSQL 17, bound to 127.0.0.1
 ```
+
+Then paste your TMDB token into `apps/api/.env` (`TMDB_ACCESS_TOKEN`). The mobile app's API URL
+for simulators, emulators and physical devices is set in `apps/mobile/.env`.
 
 ### Run
 

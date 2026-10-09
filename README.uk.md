@@ -76,14 +76,15 @@ flowchart LR
 
 ## Запуск
 
-Потрібно: Node.js 24, pnpm (`corepack enable pnpm`), gitleaks (`brew install gitleaks`), Xcode
-та/або Android Studio, безкоштовний токен TMDB (**API Read Access Token**,
+Потрібно: Node.js 24, pnpm (`corepack enable pnpm`), gitleaks (`brew install gitleaks`), Docker
+([OrbStack](https://orbstack.dev) або Docker Desktop), Xcode та/або Android Studio, безкоштовний токен TMDB (**API Read Access Token**,
 [Settings → API](https://www.themoviedb.org/settings/api)).
 
 ```sh
 pnpm install
-cp apps/api/.env.example apps/api/.env        # вписати TMDB_ACCESS_TOKEN
-cp apps/mobile/.env.example apps/mobile/.env  # адреса API для симулятора/емулятора/телефона
+pnpm setup:env    # створює env-файли й генерує локальні секрети (не показуючи їх)
+pnpm db:up        # локальний PostgreSQL 17 (Docker / OrbStack)
+# далі встав токен TMDB у apps/api/.env (TMDB_ACCESS_TOKEN)
 pnpm dev:api      # API на http://127.0.0.1:3000/api/v1
 pnpm dev:mobile   # Expo — i для iOS, a для Android
 ```
