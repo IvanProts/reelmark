@@ -28,14 +28,19 @@ Reelmark shows one movie at a time: mark it as seen or not, and the app builds y
 library and, next, recommendations based on it.
 
 <p align="center">
-  <img src="docs/screenshots/deck-uk.png" width="200" alt="Swipe deck (Ukrainian)">
-  <img src="docs/screenshots/overview-uk.png" width="200" alt="Movie overview">
-  <img src="docs/screenshots/about-uk.png" width="200" alt="About and language switch">
-  <img src="docs/screenshots/deck-en.png" width="200" alt="Swipe deck (English)">
+  <img src="docs/screenshots/swipe-uk.png" width="200" alt="Swiping a movie up to the watchlist">
+  <img src="docs/screenshots/liked-uk.png" width="200" alt="The &quot;Liked it?&quot; prompt after a seen movie">
+  <img src="docs/screenshots/library-uk.png" width="200" alt="Library of seen movies">
+  <img src="docs/screenshots/detail-uk.png" width="200" alt="Movie detail sheet with the saved decision">
 </p>
 
 ## Features
 
+- **Swipe to sort**: right = seen, left = not seen, up = want to watch, with a quick "liked it?"
+  for seen movies and one-tap undo; buttons and screen-reader actions do the same
+- **Personal library** of seen and want-to-watch movies; change or remove a decision anytime
+- **No sign-up wall**: an anonymous account is created on first launch; decisions sync to the
+  server and sorted movies never come back to the deck
 - **Card deck** of popular movies with poster, year, rating, genres and overview
 - **Ukrainian and English** for both the interface and movie data, following the device language
   and switchable in-app; missing translations fall back to English
@@ -44,15 +49,16 @@ library and, next, recommendations based on it.
 - **Accessible**: WCAG AA contrast, screen-reader labels, Dynamic Type, Reduce Motion
 - **Secure by design**: the app holds no secrets — see [Security](#security)
 
-**Status:** early development. The foundation (Phase 0) is complete; swipe gestures, accounts and a
-persistent library (Phase 1) are next — see the [backlog](docs/BACKLOG.md).
+**Status:** early development. Swiping, accounts and the library (Phase 1) are complete;
+recommendations (Phase 2) are next — see the [roadmap](docs/ROADMAP.md).
 
 ## Tech stack
 
 | Layer    | Technology                                                                          |
 | -------- | ----------------------------------------------------------------------------------- |
 | Mobile   | React Native 0.86 · Expo SDK 57 · Expo Router · TanStack Query · Reanimated         |
-| API      | NestJS 12 (ESM) · Express · native `fetch`                                          |
+| API      | NestJS 12 (ESM) · Express · native `fetch` · JWT (`jose`)                           |
+| Database | PostgreSQL 17 · Prisma 7                                                            |
 | Contract | zod 4 schemas shared by the API and the app (`@reelmark/shared`)                    |
 | Data     | [TMDB](https://www.themoviedb.org) API                                              |
 | Tooling  | TypeScript 6 (strict) · pnpm 12 workspaces · Turborepo · oxlint · Prettier · Vitest |
@@ -63,6 +69,7 @@ persistent library (Phase 1) are next — see the [backlog](docs/BACKLOG.md).
 ```mermaid
 flowchart LR
     App["Mobile app<br/>Expo · React Native"] -- "HTTPS · /api/v1" --> API["API<br/>NestJS"]
+    API -- "Prisma" --> DB[("PostgreSQL")]
     API -- "Bearer token (server-side only)" --> TMDB[("TMDB API")]
     App -. "poster images" .-> CDN[("image.tmdb.org")]
     Shared["@reelmark/shared<br/>zod contract"] -.- App
@@ -82,8 +89,12 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - **No secrets on the device.** The app bundle contains only the API URL; the TMDB token never
   leaves the server and is sent only as a request header — never in URLs or logs.
-- **Hardened API.** Security headers (helmet), per-client rate limiting, strict input validation,
-  uniform error responses without internals, fail-fast configuration validation.
+- **Accounts done carefully.** Short-lived access tokens kept in memory; refresh tokens in the OS
+  keychain, rotated on every use with reuse detection, and stored on the server only as hashes.
+  Every query is scoped to the user from the verified token, and the tests try cross-user access.
+- **Hardened API.** Security headers (helmet), per-user rate limiting, JSON-only bodies with a size
+  cap, strict input validation, `no-store` responses, uniform errors without internals, fail-fast
+  configuration validation.
 - **Defensive upstream handling.** Timeouts, response size caps, no redirect following, per-item
   validation of third-party data.
 - **Secrets stay out of git.** `.gitignore`, a pre-commit hook (blocks env files and scans staged
@@ -109,6 +120,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 pnpm install
 pnpm setup:env   # creates the env files and generates local secrets (never printed)
 pnpm db:up       # local PostgreSQL 17, bound to 127.0.0.1
+pnpm db:migrate  # apply database migrations
 ```
 
 Then paste your TMDB token into `apps/api/.env` (`TMDB_ACCESS_TOKEN`). The mobile app's API URL
@@ -121,23 +133,38 @@ pnpm dev:api      # API on http://127.0.0.1:3000/api/v1
 pnpm dev:mobile   # Expo dev server — press i for iOS, a for Android
 ```
 
+### Run on a phone
+
+With [Expo Go](https://expo.dev/go) on a phone connected to the same Wi-Fi as your computer:
+
+```sh
+pnpm dev:api:lan      # API on this Mac's Wi-Fi address, only while it runs
+pnpm dev:mobile:lan   # in a second terminal; scan the QR code with the phone
+```
+
+Use this on a trusted network only. The database stays bound to 127.0.0.1.
+
 ## Scripts
 
-| Command                 | Description                                                         |
-| ----------------------- | ------------------------------------------------------------------- |
-| `pnpm dev:api`          | Start the API in watch mode                                         |
-| `pnpm dev:mobile`       | Start the Expo dev server                                           |
-| `pnpm check`            | Everything CI runs: format check, lint, typecheck, unit + e2e tests |
-| `pnpm format`           | Format the repository with Prettier                                 |
-| `pnpm security:secrets` | Scan the working tree for secrets (gitleaks)                        |
-| `pnpm security:audit`   | Audit production dependencies                                       |
+| Command                  | Description                                                         |
+| ------------------------ | ------------------------------------------------------------------- |
+| `pnpm dev:api`           | Start the API in watch mode                                         |
+| `pnpm dev:mobile`        | Start the Expo dev server                                           |
+| `pnpm dev:*:lan`         | The same, reachable from a phone on the local network               |
+| `pnpm db:up` / `db:down` | Start / stop the local PostgreSQL                                   |
+| `pnpm db:migrate`        | Apply database migrations                                           |
+| `pnpm check`             | Everything CI runs: format check, lint, typecheck, unit + e2e tests |
+| `pnpm format`            | Format the repository with Prettier                                 |
+| `pnpm security:secrets`  | Scan the working tree for secrets (gitleaks)                        |
+| `pnpm security:audit`    | Audit production dependencies                                       |
 
 ## Testing
 
 The API has unit tests for pure logic and end-to-end tests that run the real Nest application over
-HTTP against a **fake TMDB server** — covering the contract, adversarial input, rate limiting,
-caching, upstream failures, and checks that the token never appears in any log output. No test
-calls the real TMDB API or reads your `.env`.
+HTTP against a **real PostgreSQL test database** and a **fake TMDB server** — covering the contract,
+sign-in and token rotation, cross-user isolation, adversarial input, rate limiting, caching,
+upstream failures, and checks that tokens never appear in any log output. No test calls the real
+TMDB API or reads your `.env`. The e2e tests need the local database running (`pnpm db:up`).
 
 ```sh
 pnpm check
@@ -147,7 +174,7 @@ pnpm check
 
 ```
 apps/
-  api/          NestJS API — config, TMDB client, movies module, security middleware
+  api/          NestJS API — auth, decisions, library, catalog, TMDB client, Prisma schema
   mobile/       Expo app — routes (src/app), components, i18n, theme, data layer
 packages/
   shared/       API contract: zod schemas + inferred types

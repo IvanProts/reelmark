@@ -1,12 +1,13 @@
 # Roadmap
 
-| Phase | Theme                         | Outcome for the user                                                  | Status      |
-| ----- | ----------------------------- | --------------------------------------------------------------------- | ----------- |
-| 0     | Foundation                    | Browse a deck of popular movies in Ukrainian or English               | Done        |
-| 1     | Swipes, accounts, library     | Swipe to sort movies; decisions are saved; a personal library         | In progress |
-| 2     | Recommendations               | "What to watch next", filterable by genre, with explanations          | Planned     |
-| 3     | Notifications                 | Watchlist titles becoming available, relevant releases, a weekly pick | Planned     |
-| 4     | Collaborative recommendations | "People with similar taste also loved…"                               | Planned     |
+| Phase | Theme                         | Outcome for the user                                                  | Status  |
+| ----- | ----------------------------- | --------------------------------------------------------------------- | ------- |
+| 0     | Foundation                    | Browse a deck of popular movies in Ukrainian or English               | Done    |
+| 1     | Swipes, accounts, library     | Swipe to sort movies; decisions are saved; a personal library         | Done    |
+| 1.5   | Decide faster                 | Trailer, critics' scores and key facts on every card                  | Next    |
+| 2     | Recommendations               | "What to watch next", filterable by genre, with explanations          | Planned |
+| 3     | Notifications                 | Watchlist titles becoming available, relevant releases, a weekly pick | Planned |
+| 4     | Collaborative recommendations | "People with similar taste also loved…"                               | Planned |
 
 ## Phase 1 — Swipes, accounts, library
 
@@ -18,6 +19,26 @@ Design: [design/phase-1.md](design/phase-1.md).
 - Decisions persisted in PostgreSQL; the deck excludes movies the user has already sorted.
 - Library screen: seen / want to watch, in the user's language.
 - Account deletion (required by the App Store for apps with accounts).
+
+## Phase 1.5 — Decide faster
+
+A poster, a rating and an overview are often not enough to decide between "want" and "not
+interested". The card gains what people actually use to decide:
+
+- **Trailer** — a "▶ Trailer" button on the card: the Ukrainian trailer when TMDB has one, the
+  English one otherwise. Played in the app with YouTube's official embedded player in a
+  `react-native-webview`, locked to `youtube-nocookie.com` (no other navigation allowed).
+- **Critics' scores** — Rotten Tomatoes and Metacritic, labelled with their source, from Wikidata
+  (CC0, so usable in a commercial app), matched by TMDB id. Neither site offers a public API and
+  their terms forbid scraping, so Wikidata is the only source; text only, no third-party logos.
+- **Audience rating** — the existing TMDB score, labelled as the audience's to keep it apart from
+  the critics'.
+- **Key facts** — runtime, director, top cast, tagline, age rating.
+- **Where to watch** — streaming services in the user's country (TMDB watch providers, data by
+  JustWatch, which must be credited). Coverage for Ukraine needs checking first.
+
+All of it comes through new fixed API endpoints with validated ids, parsed with zod and cached in
+the catalog, like the deck.
 
 ## Phase 2 — Recommendations
 
@@ -36,6 +57,16 @@ because the profile's features (psychological, slow burn, family drama) transfer
 - diversity — no runs of sequels from one franchise;
 - exploration — a small share of deliberately different picks to keep learning;
 - explanations — "Because you liked _Hereditary_ and _The Witch_".
+
+**Critics' consensus.** A short summary in the user's language of what critics praise and
+criticise ("Critics praise the atmosphere and the acting but find the ending drawn out"),
+generated once per movie by Claude from the film's Wikipedia "Critical response" section, credited
+and linked to the source, and stored in the catalog. It shares the server-side AI setup with the
+explanations; the Anthropic API key lives only in the API's env, like the TMDB token.
+
+**Collections.** Themed decks to swipe through, like the lists people follow on social media:
+"Slashers of the 80s", "Psychological thrillers with a twist", "Under 90 minutes". Most are built
+from TMDB keywords, a few are hand-picked; the taste profile ranks movies within each collection.
 
 **Implementation.** Candidates from TMDB discover and per-movie recommendations; features stored in
 PostgreSQL; later, text embeddings of overviews and keywords in `pgvector` to capture "mood"

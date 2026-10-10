@@ -42,7 +42,7 @@ get recommendations. Learning project for NestJS + React Native, iOS + Android.
 ## Conventions
 
 - Docs: `docs/ARCHITECTURE.md` (keep in sync with code), `docs/BACKLOG.md` (deferred work;
-  reference items from code as `TODO(phase-1): …`).
+  reference items from code as `TODO(backlog): …`).
 - Comments explain intent and non-obvious constraints — never the history of how code was written.
 - Contract-first: change `packages/shared` first, then api + mobile.
 - TypeScript strict everywhere; no `any` in new code.

@@ -1,24 +1,34 @@
 # Backlog
 
 Known follow-ups, deliberately deferred. Code that depends on an item references it with
-`TODO(phase-1)`.
+`TODO(backlog): …`.
 
-## Phase 1 — swipe gestures, accounts, persistence
+## Deck & content
 
-- **Swipe gestures** on the card stack (pan + fling), replacing the "Seen / Not seen" buttons as the
-  primary input.
-- **Persist decisions** (seen / not seen / want to watch) per user in PostgreSQL.
-- **Keep the deck position stable across a language switch.** The `uk` and `en` decks are ordered
-  slightly differently by TMDB, so the app must track the current movie by id, not by index.
-- **Persist the language choice** (currently in memory only).
 - **Cache failed English overview fallbacks** for ~60 s (like genre failures), or give the fallback
   a short time budget, so a hanging upstream endpoint can't slow down every `uk` deck request.
 - **Mark the language of fallback overviews** in the contract (e.g. `overviewLang`) so screen
   readers pronounce English text with an English voice.
-- **Per-user rate limiting** plus a global budget, once accounts exist.
-- **Route parameters**: validate ids with shared zod schemas; build upstream URLs with `new URL()`.
-- **JSON-only API**: disable form-urlencoded parsing, cap request bodies at ~16 KB, send
-  `Cache-Control: no-store` on user data.
+- **A global TMDB budget** on top of the per-user rate limits, so many accounts together can't
+  exhaust our TMDB quota.
+- **Upstream URLs for per-movie endpoints** (details, recommendations) built with `new URL()` from
+  validated ids.
+
+## Accounts
+
+- **Sign in with Apple / Google**, attached to the existing anonymous account, so a library
+  survives a new phone or a reinstall.
+- **Device attestation for anonymous sign-up** (App Attest / Play Integrity) before public launch.
+  The per-IP limit (10 per hour) can block real users behind carrier NAT, where many phones share
+  one address; and since rate limits are per user, each new anonymous account starts with fresh
+  ones.
+- **Clean-up job**: delete expired and revoked refresh tokens (today each refresh only removes that
+  user's expired ones) and long-inactive anonymous accounts that have no decisions.
+
+## Performance
+
+- **Bulk catalog writes**: one `INSERT … ON CONFLICT` per served deck page instead of ~2 upserts per
+  movie.
 
 ## Security & infrastructure
 
@@ -40,6 +50,8 @@ Known follow-ups, deliberately deferred. Code that depends on an item references
 ## Polish
 
 - TMDB logo on the About screen (TMDB attribution guidelines).
+- Movie detail outside the library (from the deck or a deep link): needs a per-movie endpoint; the
+  sheet currently uses library data already on screen.
 - Android dev/release builds need HTTPS or a cleartext exception for a local API.
 - Drop `vite-tsconfig-paths` from the API test setup (Vite 8 resolves tsconfig paths natively).
 - Evaluate Nest 12's built-in `app.useSecurityHeaders()` as a replacement for `helmet`.
