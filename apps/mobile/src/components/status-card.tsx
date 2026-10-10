@@ -15,12 +15,14 @@ type StatusCardProps = {
     icon?: IconName;
     onPress: () => void;
   };
+  /** Without the card background, e.g. inside a list. */
+  plain?: boolean;
 };
 
-/** Card-shaped message shown in place of the deck: errors, empty and finished states. */
-export function StatusCard({ icon, title, message, action }: StatusCardProps) {
+/** Message for error, empty and finished states; card-shaped where it replaces the deck. */
+export function StatusCard({ icon, title, message, action, plain = false }: StatusCardProps) {
   return (
-    <View style={styles.card}>
+    <View style={[styles.content, !plain && styles.card]}>
       <View style={styles.iconCircle}>
         <Icon name={icon} size={sizes.statusIcon} color="accent" />
       </View>
@@ -43,12 +45,14 @@ export function StatusCard({ icon, title, message, action }: StatusCardProps) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flex: 1,
+  content: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.md,
     padding: spacing.xxl,
+  },
+  card: {
+    flex: 1,
     borderRadius: radii.card,
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,

@@ -8,11 +8,21 @@ export const uk = {
   /** This language's name in itself, for the language switch. */
   'language.name': 'Українська',
 
+  'common.close': 'Закрити',
+  'common.cancel': 'Скасувати',
+
+  'tabs.deck': 'Колода',
+  'tabs.library': 'Бібліотека',
+
   'deck.counter': 'Оцінено: {count}',
   'deck.notSeen': 'Не бачив',
   'deck.notSeenHint': 'Позначити, що ви не бачили цей фільм, і показати наступний',
   'deck.seen': 'Бачив',
   'deck.seenHint': 'Позначити, що ви бачили цей фільм, і показати наступний',
+  'deck.want': 'Хочу',
+  'deck.wantHint': 'Додати фільм до списку «Хочу» й показати наступний',
+  'deck.undo': 'Назад',
+  'deck.undoHint': 'Повернути попередню картку',
   'deck.credit': 'Дані та постери: TMDB',
   'deck.loading': 'Завантажуємо фільми',
   'deck.retry': 'Спробувати ще',
@@ -20,14 +30,44 @@ export const uk = {
   'deck.emptyMessage': 'Сервер не знайшов жодного фільму. Спробуйте оновити трохи згодом.',
   'deck.refresh': 'Оновити',
   'deck.finishedTitle': 'Ви переглянули всі фільми',
-  'deck.finishedMessage': 'Нові картки з’являться згодом, а поки можна пройтися ще раз.',
-  'deck.restart': 'Почати спочатку',
+  'deck.finishedMessage': 'Нові картки з’являться згодом.',
+  'deck.likedQuestion': 'Сподобався?',
+  'deck.liked': 'Сподобався',
+  'deck.disliked': 'Не сподобався',
+  'deck.saveFailed': 'Не вдалося зберегти «{title}». Картку повернуто.',
+  'deck.rateFailed': 'Не вдалося зберегти оцінку для «{title}».',
+  'deck.undoFailed': 'Не вдалося скасувати рішення для «{title}».',
+
+  /** Stamps that fade in on the card while it is dragged. */
+  'stamp.seen': 'БАЧИВ',
+  'stamp.notSeen': 'НЕ БАЧИВ',
+  'stamp.want': 'ХОЧУ',
 
   'card.noOverview': 'Опису цього фільму поки немає.',
   'card.a11yYear': '{year} рік',
   'card.a11yRating': 'рейтинг {rating} з 10',
   'card.showOverview': 'Показати опис фільму',
   'card.hideOverview': 'Сховати опис',
+
+  'library.title': 'Бібліотека',
+  'library.list': 'Список',
+  'library.seen': 'Бачив',
+  'library.want': 'Хочу',
+  'library.emptySeenTitle': 'Тут з’являться переглянуті фільми',
+  'library.emptySeenMessage':
+    'Проведіть картку в колоді вправо, щоб позначити фільм як переглянутий.',
+  'library.emptyWantTitle': 'Список «Хочу» порожній',
+  'library.emptyWantMessage': 'Проведіть картку вгору, щоб зберегти фільм на потім.',
+  'library.liked': 'сподобався',
+  'library.disliked': 'не сподобався',
+  'library.openHint': 'Відкриває подробиці й рішення',
+
+  'detail.decision': 'Ваше рішення',
+  'detail.noOpinion': 'Без оцінки',
+  'detail.remove': 'Прибрати з бібліотеки',
+  'detail.removeHint': 'Фільм знову з’явиться в колоді',
+  'detail.saveFailed': 'Не вдалося зберегти зміни. Спробуйте ще раз.',
+  'detail.notFound': 'Цього фільму вже немає в бібліотеці.',
 
   'error.unreachableTitle': 'Немає зв’язку з сервером',
   'error.unreachableMessage': 'Перевірте підключення до інтернету й спробуйте ще раз.',
@@ -39,10 +79,10 @@ export const uk = {
   'error.genericMessage': 'Сервер зараз не може показати фільми. Спробуйте ще раз за хвилину.',
 
   'about.title': 'Про застосунок',
-  'about.close': 'Закрити',
   'about.description':
-    '{appName} — ваша особиста кінобібліотека. Гортайте картки фільмів, позначайте, що вже бачили, — і отримуйте рекомендації, що подивитися далі.',
+    '{appName} — ваша особиста кінобібліотека. Проведіть картку вправо, якщо бачили фільм, уліво — якщо ні, угору — щоб подивитися пізніше.',
   'about.languageTitle': 'Мова',
+  'about.languageSaveFailed': 'Не вдалося зберегти вибір мови в обліковому записі.',
   'about.dataTitle': 'Дані про фільми',
   'about.dataBody': 'Назви, описи, рейтинги й постери надає The Movie Database (TMDB).',
   /** Shown under the official English sentence; empty when not needed. */
@@ -50,5 +90,13 @@ export const uk = {
     'Цей продукт використовує TMDB API, але не схвалений і не сертифікований TMDB.',
   'about.tmdbLink': 'themoviedb.org',
   'about.tmdbLinkHint': 'Відкриває сайт TMDB у браузері',
+  'about.privacyTitle': 'Ваші дані',
+  'about.deleteData': 'Видалити мої дані',
+  'about.deleteDataHint': 'Видаляє бібліотеку й усі рішення з сервера',
+  'about.deleteConfirmTitle': 'Видалити всі дані?',
+  'about.deleteConfirmMessage':
+    'Бібліотеку й усі ваші рішення буде видалено назавжди. Цю дію не можна скасувати.',
+  'about.deleteConfirm': 'Видалити',
+  'about.deleteFailed': 'Не вдалося видалити дані. Спробуйте ще раз.',
   'about.version': 'Версія {version}',
 } as const;

@@ -1,6 +1,6 @@
 import type { PlainTranslationKey } from '@/i18n';
 
-import { ApiError } from './api';
+import { ApiError } from './http';
 
 type ErrorCopy = {
   /** Translation keys; the screen renders them with `t()`. */

@@ -29,8 +29,11 @@ export const radii = {
 export const sizes = {
   /** Apple HIG / Material minimum touch target. Never go below this. */
   minTouchTarget: 44,
-  /** Height of the big deck action buttons. */
+  /** Height of the big pill buttons. */
   actionButton: 56,
+  /** Round deck buttons: the main decisions, and the smaller undo. */
+  deckButton: 64,
+  deckButtonSmall: 48,
   /** Icon size inside buttons. */
   icon: 20,
   /** Tiny icons inside badges. */
@@ -40,6 +43,8 @@ export const sizes = {
   /** Large icon on status (error/empty) cards, and the circle around it. */
   statusIcon: 28,
   statusIconCircle: 64,
+  /** Poster width in the movie detail sheet. */
+  detailPoster: 96,
   /** Posters are 2:3 (width:height), so cards are too. */
   cardAspectRatio: 2 / 3,
   /** How far the next card peeks out from under the top one. */

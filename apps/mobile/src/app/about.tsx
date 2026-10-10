@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
@@ -6,18 +6,22 @@ import { openBrowserAsync } from 'expo-web-browser';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SUPPORTED_LOCALES } from '@reelmark/shared';
+import { SUPPORTED_LOCALES, type Locale } from '@reelmark/shared';
 
 import { ActionButton } from '@/components/action-button';
 import { AppText } from '@/components/app-text';
+import { DangerButton } from '@/components/danger-button';
 import { IconButton } from '@/components/icon-button';
 import { SegmentedControl } from '@/components/segmented-control';
+import { useDeleteAccount, useSaveLocale } from '@/hooks/use-profile';
 import { dictionaries, useI18n } from '@/i18n';
 import { colors, radii, spacing } from '@/theme';
 
 const TMDB_URL = 'https://www.themoviedb.org/';
 /** Required by TMDB's terms of use: shown word for word in every language, so not translated. */
 const TMDB_ATTRIBUTION = 'This product uses the TMDB API but is not endorsed or certified by TMDB.';
+/** The sheet fits its content up to this share of the screen, then scrolls. */
+const MAX_SHEET_HEIGHT = 0.9;
 
 // Each language is labelled in itself ("Українська", "English"), so people can
 // find theirs even when they can't read the current one.
@@ -27,24 +31,52 @@ const LANGUAGE_OPTIONS = SUPPORTED_LOCALES.map((code) => ({
   labelLanguage: code,
 }));
 
-/** About sheet: app description, language switch and TMDB attribution. Presented as a form sheet. */
+/** About sheet: description, language, TMDB attribution and deleting the user's data. */
 export default function AboutScreen() {
   const router = useRouter();
-  const { t, locale, setLocale } = useI18n();
+  const { t, locale, setLocale, resetLocale } = useI18n();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const saveLocale = useSaveLocale();
+  const deleteAccount = useDeleteAccount();
   const version = Constants.expoConfig?.version;
   const attributionTranslation = t('about.attributionTranslation');
 
+  function changeLanguage(next: Locale) {
+    setLocale(next);
+    saveLocale.mutate(next);
+  }
+
+  function confirmDelete() {
+    Alert.alert(t('about.deleteConfirmTitle'), t('about.deleteConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('about.deleteConfirm'),
+        style: 'destructive',
+        onPress: () =>
+          deleteAccount.mutate(undefined, {
+            onSuccess: () => {
+              resetLocale();
+              router.back();
+            },
+          }),
+      },
+    ]);
+  }
+
   return (
-    // No `flex: 1`: the sheet uses `fitToContents`, so it sizes itself to this view.
-    <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}>
+    // Fits its content (`fitToContents`), but scrolls on screens too short for all of it.
+    <ScrollView
+      style={{ maxHeight: height * MAX_SHEET_HEIGHT }}
+      contentContainerStyle={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}
+    >
       <View style={styles.header}>
         <AppText variant="title" accessibilityRole="header">
           {t('about.title')}
         </AppText>
         <IconButton
           icon="close"
-          accessibilityLabel={t('about.close')}
+          accessibilityLabel={t('common.close')}
           onPress={() => router.back()}
         />
       </View>
@@ -56,9 +88,14 @@ export default function AboutScreen() {
         <SegmentedControl
           options={LANGUAGE_OPTIONS}
           selected={locale}
-          onChange={setLocale}
+          onChange={changeLanguage}
           accessibilityLabel={t('about.languageTitle')}
         />
+        {saveLocale.isError ? (
+          <AppText variant="caption" color="danger" accessibilityLiveRegion="polite">
+            {t('about.languageSaveFailed')}
+          </AppText>
+        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -89,12 +126,27 @@ export default function AboutScreen() {
         />
       </View>
 
+      <View style={styles.section}>
+        <AppText variant="label">{t('about.privacyTitle')}</AppText>
+        <DangerButton
+          label={t('about.deleteData')}
+          hint={t('about.deleteDataHint')}
+          onPress={confirmDelete}
+          disabled={deleteAccount.isPending}
+        />
+        {deleteAccount.isError ? (
+          <AppText variant="caption" color="danger" accessibilityLiveRegion="polite">
+            {t('about.deleteFailed')}
+          </AppText>
+        ) : null}
+      </View>
+
       {version ? (
         <AppText variant="caption" color="textTertiary">
           {t('about.version', { version })}
         </AppText>
       ) : null}
-    </View>
+    </ScrollView>
   );
 }
 

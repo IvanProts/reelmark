@@ -8,6 +8,7 @@
  * Contrast (WCAG 2.1, checked against `background`):
  *   textPrimary   17.4:1   textSecondary 8.3:1   textTertiary 5.9:1
  *   accent        10.8:1   onAccent on accent 10.3:1
+ *   want          11.0:1   danger 7.7:1
  * Everything meets AA (4.5:1) for normal text.
  */
 export const colors = {
@@ -31,6 +32,10 @@ export const colors = {
   accent: '#F5B544',
   /** Text/icons placed on top of `accent`. */
   onAccent: '#17110A',
+  /** "Want to watch": the swipe-up stamp and the watchlist button. */
+  want: '#8CC8FF',
+  /** Destructive actions, such as deleting data. */
+  danger: '#FF7A6B',
 
   /** Shimmer highlight that sweeps across skeletons. */
   shimmer: 'rgba(255, 255, 255, 0.06)',
@@ -45,6 +50,8 @@ export const colors = {
    * out, and a lighter edge reads as "another card underneath" on the dark canvas.
    */
   stackVeil: 'rgba(42, 42, 53, 0.82)',
+  /** Behind swipe stamps, so their text reads on any poster. */
+  stampBackdrop: 'rgba(11, 11, 15, 0.45)',
   /** Darkens the whole poster while the overview is open. */
   posterDim: 'rgba(11, 11, 15, 0.82)',
 } as const;

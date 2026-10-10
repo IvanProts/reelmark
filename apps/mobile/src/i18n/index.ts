@@ -4,4 +4,4 @@
  * `dictionaries` (i18n-provider.tsx). TypeScript reports any missing key.
  */
 export { dictionaries, I18nProvider, useI18n } from './i18n-provider';
-export type { PlainTranslationKey } from './types';
+export type { PlainTranslationKey, TranslateFn } from './types';

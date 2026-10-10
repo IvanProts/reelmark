@@ -22,6 +22,8 @@ export const typography = {
   caption: { fontSize: 14, lineHeight: 19, fontWeight: '500' },
   /** Genre chips, footnotes. */
   micro: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.2 },
+  /** Swipe stamps on a dragged card ("БАЧИВ"). */
+  stamp: { fontSize: 26, lineHeight: 30, fontWeight: '900', letterSpacing: 1.5 },
 } as const satisfies Record<string, TextStyle>;
 
 export type TypographyVariant = keyof typeof typography;
@@ -40,4 +42,5 @@ export const maxFontScale: Record<TypographyVariant, number> = {
   callout: 1.5,
   caption: 1.5,
   micro: 1.4,
+  stamp: 1,
 };

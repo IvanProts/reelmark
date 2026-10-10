@@ -16,23 +16,46 @@ type I18nValue = {
   locale: Locale;
   /** Translates a key into the current language. */
   t: TranslateFn;
-  /** Switches the whole app to another language. */
+  /** Switches the whole app to another language for this session. */
   setLocale: (locale: Locale) => void;
+  /** Forgets the in-session choice, falling back to the saved or device language. */
+  resetLocale: () => void;
 };
 
 const I18nContext = createContext<I18nValue | null>(null);
 
-/** Starts in the device language; mounted once in the root layout. */
-export function I18nProvider({ children }: { children: ReactNode }) {
-  // TODO(phase-1): persist the chosen language; it currently resets on restart.
-  const [locale, setLocale] = useState<Locale>(getDeviceLocale);
+type I18nProviderProps = {
+  /** The language saved to the account, or null when the user hasn't picked one. */
+  savedLocale: Locale | null;
+  children: ReactNode;
+};
+
+/**
+ * The UI language is the choice made in this session, else the one saved to the account,
+ * else the device language. Mounted once in the root layout.
+ */
+export function I18nProvider({ savedLocale, children }: I18nProviderProps) {
+  const [deviceLocale] = useState(getDeviceLocale);
+  const [chosenLocale, setChosenLocale] = useState<Locale | null>(null);
+  const locale = chosenLocale ?? savedLocale ?? deviceLocale;
 
   const t: TranslateFn = (key, ...params) => interpolate(dictionaries[locale][key], params[0]);
 
-  return <I18nContext value={{ locale, t, setLocale }}>{children}</I18nContext>;
+  return (
+    <I18nContext
+      value={{
+        locale,
+        t,
+        setLocale: setChosenLocale,
+        resetLocale: () => setChosenLocale(null),
+      }}
+    >
+      {children}
+    </I18nContext>
+  );
 }
 
-/** Current language, `t()` and `setLocale()` for any component under `I18nProvider`. */
+/** Current language, `t()` and the language setters for any component under `I18nProvider`. */
 export function useI18n(): I18nValue {
   const value = useContext(I18nContext);
   if (!value) throw new Error('useI18n() must be used inside <I18nProvider>.');

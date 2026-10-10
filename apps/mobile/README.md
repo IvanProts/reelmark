@@ -1,19 +1,27 @@
 # Reelmark mobile app
 
 The Reelmark client for iOS and Android, built with Expo SDK 57, React Native 0.86 and Expo
-Router. It shows a deck of movie cards loaded from the Reelmark API and works in Ukrainian and
-English.
+Router. You sort movies by swiping cards (seen, not seen, want to watch), and the app builds your
+library from those decisions. It works in Ukrainian and English, with no sign-up: the first
+launch creates an anonymous account.
 
 ## Screens
 
-| Route    | File                     | Purpose                                                      |
-| -------- | ------------------------ | ------------------------------------------------------------ |
-| `/`      | `src/app/index.tsx`      | Deck of movie cards with "Not seen" / "Seen it" actions      |
-| `/about` | `src/app/about.tsx`      | Bottom sheet: description, language switch, TMDB attribution |
-| other    | `src/app/+not-found.tsx` | Sends unknown deep links to the deck                         |
+| Route        | File                         | Purpose                                                          |
+| ------------ | ---------------------------- | ---------------------------------------------------------------- |
+| `/`          | `src/app/(tabs)/index.tsx`   | Deck tab: swipe cards, or use the buttons below them             |
+| `/library`   | `src/app/(tabs)/library.tsx` | Library tab: "Seen" and "Want" poster grids, infinite scroll     |
+| `/movie/:id` | `src/app/movie/[id].tsx`     | Sheet: details of a library movie; change or remove the decision |
+| `/about`     | `src/app/about.tsx`          | Sheet: language, TMDB attribution, deleting your data            |
+| other        | `src/app/+not-found.tsx`     | Sends unknown deep links to the deck                             |
 
-On the deck, the next card peeks out behind the current one and tapping a card shows its
-overview. The deck has dedicated loading, error (offline vs. server), empty and finished states.
+**Deck.** Swipe right for "seen", left for "not seen", up for "want". A stamp fades in and a
+haptic tick marks the threshold; a short flick also counts. After "seen", a "Liked it?" 👍 / 👎
+prompt stays for about 4 seconds; ignoring it is fine. Undo brings the last card back and deletes
+its saved decision. Decisions are optimistic: the card leaves at once, and comes back with a
+notice if saving still fails after retries. Tapping a card shows its overview. Screen-reader
+users get the three decisions as accessibility actions on the card; with Reduce Motion the card
+fades instead of flying and tilting.
 
 ## Getting started
 
@@ -41,7 +49,25 @@ never hold a secret. Restart the dev server after changing it.
 | iOS Simulator    | `http://localhost:3000`              | The simulator shares the Mac's network.                  |
 | Android emulator | `http://10.0.2.2:3000`               | `10.0.2.2` is the emulator's alias for the host machine. |
 | Physical device  | `http://<your-computer-LAN-IP>:3000` | Same Wi-Fi network; start the API with `HOST=0.0.0.0`.   |
-| Release build    | `https://…`                          | Release builds refuse plain `http` (`src/lib/api.ts`).   |
+| Release build    | `https://…`                          | Release builds refuse plain `http` (`src/lib/http.ts`).  |
+
+## Sessions
+
+The app holds no secrets and no password. On first launch it calls `POST /auth/anonymous` and
+gets two tokens:
+
+- the **access token** (15 minutes) stays in memory only and goes in `Authorization: Bearer`;
+- the **refresh token** (60 days, single-use) is stored with `expo-secure-store` (Keychain /
+  Keystore, this device only).
+
+`src/lib/session.ts` signs every request. When the API answers 401, it refreshes once and
+retries; concurrent requests share that single refresh, because the server rotates the refresh
+token on every use. If the server rejects the refresh token, the session is gone: the app starts
+a new anonymous account and drops cached data. Network errors never end a session. Deleting your
+data (About) calls `DELETE /me`, wipes secure storage and the query cache, and starts fresh.
+
+The language picked in About is saved to the account (`PATCH /me`) and restored on the next
+launch from `GET /me`; until then the app follows the device language.
 
 ## Project structure
 
@@ -49,9 +75,10 @@ never hold a secret. Restart the dev server after changing it.
 src/
   app/          Routes (Expo Router): every file is a screen, _layout.tsx sets up providers
   components/   UI building blocks: MovieCard, CardStack, buttons, skeleton, status card
-  hooks/        useDeck: paginated deck data, prefetching, current position
+  hooks/        Data hooks: useDeck, useLibrary, decision mutations, profile and account
   i18n/         Dictionaries (uk.ts, en.ts), I18nProvider / useI18n, device language detection
-  lib/          API client with typed errors, TanStack Query client, formatting
+  lib/          http.ts (requests, typed errors), session.ts (tokens), api.ts (endpoints),
+                TanStack Query client, haptics, formatting
   theme/        Design tokens: colours, spacing, radii, sizes, typography
 assets/images/  App icon and Android adaptive icon layers
 ```
@@ -70,9 +97,9 @@ Conventions:
 - `const { t, locale, setLocale } = useI18n()` gives any component the current language.
   `t('deck.counter', { count: 3 })` fills `{placeholders}`; a missing or unknown placeholder is a
   compile error.
-- The app starts in the first supported language from the device settings
-  (`expo-localization`), falling back to English. The About sheet switches the language at
-  runtime; the deck then reloads in that language.
+- The language is the one saved to the account, else the first supported language from the
+  device settings (`expo-localization`), else English. Switching it in About reloads the deck
+  and library in that language.
 - Numbers are formatted per language with `Intl.NumberFormat` (`8,2` in Ukrainian, `8.2` in
   English).
 

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,37 +17,31 @@ import { Icon } from './icon';
 const MAX_GENRES = 3;
 const ANIMATION_MS = 250;
 
+type MovieCardProps = Movie & {
+  /** Shows the overview over a dimmed poster. */
+  expanded?: boolean;
+};
+
 /**
  * One movie: full-bleed poster with title, year, rating and genres on a bottom gradient.
- * Tapping toggles the overview. Props are the shared `MovieCard` contract type; the card
- * fills its parent, which decides the size.
+ * Purely visual; the swipeable wrapper handles touches and screen readers. The card fills
+ * its parent, which decides the size.
  */
-export function MovieCard({ title, year, rating, genres, overview, posterUrl }: Movie) {
-  const { t, locale } = useI18n();
-  const [expanded, setExpanded] = useState(false);
+export function MovieCard({
+  title,
+  year,
+  rating,
+  genres,
+  overview,
+  posterUrl,
+  expanded = false,
+}: MovieCardProps) {
+  const { t } = useI18n();
   const shownGenres = genres.slice(0, MAX_GENRES);
   const overviewText = overview.trim() || t('card.noOverview');
 
-  // What a screen reader says for the whole card.
-  const description = [
-    title,
-    year ? t('card.a11yYear', { year }) : null,
-    hasRating(rating) ? t('card.a11yRating', { rating: formatRating(rating, locale) }) : null,
-    shownGenres.join(', ') || null,
-  ]
-    .filter(Boolean)
-    .join(', ');
-
   return (
-    // TODO(phase-1): turn this into a Tap gesture composed with the card's Pan gesture.
-    <Pressable
-      style={styles.card}
-      onPress={() => setExpanded((value) => !value)}
-      accessibilityRole="button"
-      accessibilityLabel={expanded ? `${description}. ${overviewText}` : description}
-      accessibilityHint={expanded ? t('card.hideOverview') : t('card.showOverview')}
-      accessibilityState={{ expanded }}
-    >
+    <View style={styles.card}>
       <Image
         source={posterUrl}
         style={StyleSheet.absoluteFill}
@@ -113,8 +106,21 @@ export function MovieCard({ title, year, rating, genres, overview, posterUrl }: 
           </Animated.ScrollView>
         ) : null}
       </View>
-    </Pressable>
+    </View>
   );
+}
+
+/** What a screen reader says for a movie: title, year, rating and genres. */
+export function useMovieDescription({ title, year, rating, genres }: Movie): string {
+  const { t, locale } = useI18n();
+  return [
+    title,
+    year ? t('card.a11yYear', { year }) : null,
+    hasRating(rating) ? t('card.a11yRating', { rating: formatRating(rating, locale) }) : null,
+    genres.slice(0, MAX_GENRES).join(', ') || null,
+  ]
+    .filter(Boolean)
+    .join(', ');
 }
 
 /** "2024 · ★ 7,8" (uk) / "2024 · ★ 7.8" (en) — each part is optional. */
