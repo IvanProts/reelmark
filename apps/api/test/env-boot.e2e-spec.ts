@@ -25,6 +25,8 @@ const ENV_KEYS = [
   'TMDB_ACCESS_TOKEN',
   'TMDB_BASE_URL',
   'TMDB_TIMEOUT_MS',
+  'DATABASE_URL',
+  'JWT_SECRET',
 ] as const;
 
 const GOOD_TOKEN = 'boot-fake-token-3c9e1a7b5d2f4e6a8b0c';
@@ -34,6 +36,14 @@ const GOOD_TOKEN = 'boot-fake-token-3c9e1a7b5d2f4e6a8b0c';
  * (generic-api-key), which would block the commit.
  */
 const HEX32 = 'abcdef0123456789'.repeat(2);
+
+/** Never connected to: the app only connects on init, and these tests stop after creation. */
+const DB_PASSWORD = 'boot-db-pass-4a7c';
+/** Valid values for the variables a case doesn't test. */
+const REQUIRED_ENV = {
+  DATABASE_URL: `postgresql://boot-user:${DB_PASSWORD}@127.0.0.1:5432/boot_db`,
+  JWT_SECRET: 'boot-signing-material-'.repeat(4),
+};
 
 interface BootResult {
   error: unknown;
@@ -92,12 +102,14 @@ async function bootWith(env: Record<string, string>): Promise<BootResult> {
 
 describe('Boot with invalid configuration', () => {
   it('succeeds with a valid test configuration (control)', async () => {
-    const { error } = await bootWith({
+    const { error, everything } = await bootWith({
+      ...REQUIRED_ENV,
       NODE_ENV: 'test',
       TMDB_ACCESS_TOKEN: GOOD_TOKEN,
       TMDB_BASE_URL: 'http://127.0.0.1:9/3',
     });
     expect(error).toBeUndefined();
+    expect(everything).not.toContain(DB_PASSWORD);
   });
 
   it.each<[string, Record<string, string>, string[], string[]]>([
@@ -183,6 +195,33 @@ describe('Boot with invalid configuration', () => {
       ['user-3f1', 'pass-8d2', GOOD_TOKEN],
     ],
     [
+      'a missing DATABASE_URL',
+      { TMDB_ACCESS_TOKEN: GOOD_TOKEN, DATABASE_URL: '' },
+      ['DATABASE_URL: is required'],
+      [GOOD_TOKEN],
+    ],
+    [
+      'a DATABASE_URL for another database engine',
+      {
+        TMDB_ACCESS_TOKEN: GOOD_TOKEN,
+        DATABASE_URL: 'mysql://boot-user:db-pass-5c3e@db-host-9b.internal:3306/app',
+      },
+      ['DATABASE_URL: must be a postgresql:// connection URL'],
+      ['db-pass-5c3e', 'db-host-9b', GOOD_TOKEN],
+    ],
+    [
+      'a short JWT_SECRET',
+      { TMDB_ACCESS_TOKEN: GOOD_TOKEN, JWT_SECRET: 'short-signing-6d2' },
+      ['JWT_SECRET: is too short'],
+      ['short-signing-6d2', GOOD_TOKEN],
+    ],
+    [
+      'a JWT_SECRET with characters outside hex and base64',
+      { TMDB_ACCESS_TOKEN: GOOD_TOKEN, JWT_SECRET: 'signing material 8f1 '.repeat(4) },
+      ['JWT_SECRET: may only contain'],
+      ['signing material 8f1', GOOD_TOKEN],
+    ],
+    [
       'an unknown NODE_ENV',
       { NODE_ENV: 'staging-e4c1', TMDB_ACCESS_TOKEN: GOOD_TOKEN },
       ['NODE_ENV'],
@@ -201,7 +240,7 @@ describe('Boot with invalid configuration', () => {
       ['port-value-2b8', 'placeholder-token-value', 'secret-host-a1', 'timeout-value-9a1'],
     ],
   ])('fails on %s, naming the variable but no value', async (_name, env, mention, never) => {
-    const { error, everything } = await bootWith(env);
+    const { error, everything } = await bootWith({ ...REQUIRED_ENV, ...env });
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toMatch(/^Invalid environment configuration:/);
@@ -210,7 +249,7 @@ describe('Boot with invalid configuration', () => {
     for (const text of mention) {
       expect(everything).toContain(text);
     }
-    for (const value of never) {
+    for (const value of [...never, DB_PASSWORD]) {
       expect(everything).not.toContain(value);
     }
   });

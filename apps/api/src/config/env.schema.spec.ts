@@ -8,10 +8,18 @@ const TOKEN = 'unit-test-token-0123456789abcdef0123456789';
  */
 const HEX32 = '0123456789abcdef'.repeat(2);
 
-/** Runs validateEnv and returns the thrown message ('' when it didn't throw). */
+const DB_PASSWORD = 'unit-db-pass-91f3';
+/** Valid values for every required variable; tests override the one they examine. */
+const REQUIRED = {
+  TMDB_ACCESS_TOKEN: TOKEN,
+  DATABASE_URL: `postgresql://app:${DB_PASSWORD}@127.0.0.1:5432/app`,
+  JWT_SECRET: 'unit-signing-material-'.repeat(4),
+};
+
+/** Runs validateEnv on REQUIRED plus `raw`; returns the thrown message ('' when it didn't throw). */
 function errorMessageFor(raw: Record<string, unknown>): string {
   try {
-    validateEnv(raw);
+    validateEnv({ ...REQUIRED, ...raw });
     return '';
   } catch (error) {
     return (error as Error).message;
@@ -19,12 +27,12 @@ function errorMessageFor(raw: Record<string, unknown>): string {
 }
 
 describe('validateEnv', () => {
-  it('applies defaults when only the token is set', () => {
-    expect(validateEnv({ TMDB_ACCESS_TOKEN: TOKEN })).toEqual({
+  it('applies defaults when only the required variables are set', () => {
+    expect(validateEnv(REQUIRED)).toEqual({
+      ...REQUIRED,
       NODE_ENV: 'development',
       HOST: '127.0.0.1',
       PORT: 3000,
-      TMDB_ACCESS_TOKEN: TOKEN,
       TMDB_BASE_URL: 'https://api.themoviedb.org/3',
       TMDB_TIMEOUT_MS: 5000,
     });
@@ -32,11 +40,14 @@ describe('validateEnv', () => {
 
   it('accepts a JWT-shaped token (base64url segments joined by dots)', () => {
     const jwtShaped = `${'Ab0'.repeat(8)}.${'cD1_-'.repeat(10)}.${'e2F'.repeat(12)}`;
-    expect(validateEnv({ TMDB_ACCESS_TOKEN: jwtShaped }).TMDB_ACCESS_TOKEN).toBe(jwtShaped);
+    expect(validateEnv({ ...REQUIRED, TMDB_ACCESS_TOKEN: jwtShaped }).TMDB_ACCESS_TOKEN).toBe(
+      jwtShaped,
+    );
   });
 
   it('coerces numbers, trims the token and keeps explicit values', () => {
     const env = validateEnv({
+      ...REQUIRED,
       NODE_ENV: 'production',
       HOST: '0.0.0.0',
       PORT: '8080',
@@ -53,13 +64,13 @@ describe('validateEnv', () => {
   });
 
   it('ignores unrelated variables, as process.env has many', () => {
-    expect(() =>
-      validateEnv({ TMDB_ACCESS_TOKEN: TOKEN, PATH: '/usr/bin', HOME: '/x' }),
-    ).not.toThrow();
+    expect(() => validateEnv({ ...REQUIRED, PATH: '/usr/bin', HOME: '/x' })).not.toThrow();
   });
 
   it('requires TMDB_ACCESS_TOKEN', () => {
-    expect(errorMessageFor({})).toMatch(/TMDB_ACCESS_TOKEN: is required/);
+    expect(errorMessageFor({ TMDB_ACCESS_TOKEN: undefined })).toMatch(
+      /TMDB_ACCESS_TOKEN: is required/,
+    );
   });
 
   it('treats an empty value as unset', () => {
@@ -105,6 +116,7 @@ describe('validateEnv', () => {
 
     it('allows http to localhost only when NODE_ENV=test', () => {
       const env = validateEnv({
+        ...REQUIRED,
         NODE_ENV: 'test',
         TMDB_ACCESS_TOKEN: TOKEN,
         TMDB_BASE_URL: 'http://localhost:4010/3',
@@ -140,6 +152,51 @@ describe('validateEnv', () => {
       expect(errorMessageFor({ TMDB_ACCESS_TOKEN: TOKEN, TMDB_BASE_URL: url })).toMatch(
         /TMDB_BASE_URL/,
       );
+    });
+  });
+
+  describe('DATABASE_URL', () => {
+    it('is required', () => {
+      expect(errorMessageFor({ DATABASE_URL: '' })).toMatch(/DATABASE_URL: is required/);
+    });
+
+    it.each([
+      'mysql://app:secret-91f@127.0.0.1/app',
+      'postgres://app:secret-91f@127.0.0.1/app', // alias, but the URL must say postgresql://
+      'http://127.0.0.1:5432/app',
+      'not a url secret-91f',
+      'postgresql://',
+    ])('rejects %s without echoing it', (url) => {
+      const message = errorMessageFor({ DATABASE_URL: url });
+      expect(message).toMatch(/DATABASE_URL: must be a postgresql:\/\/ connection URL/);
+      expect(message).not.toContain('secret-91f');
+    });
+
+    it('never prints the password, even when other variables are invalid', () => {
+      expect(errorMessageFor({ PORT: 'abc' })).not.toContain(DB_PASSWORD);
+    });
+  });
+
+  describe('JWT_SECRET', () => {
+    it('is required', () => {
+      expect(errorMessageFor({ JWT_SECRET: '' })).toMatch(/JWT_SECRET: is required/);
+    });
+
+    it('accepts hex and base64 keys of 64+ characters', () => {
+      const hex = 'a1'.repeat(48);
+      const base64 = `${'Ab+/'.repeat(16)}==`;
+      expect(validateEnv({ ...REQUIRED, JWT_SECRET: hex }).JWT_SECRET).toBe(hex);
+      expect(validateEnv({ ...REQUIRED, JWT_SECRET: base64 }).JWT_SECRET).toBe(base64);
+    });
+
+    it.each([
+      ['too short', 'k'.repeat(63)],
+      ['a space', `${'k'.repeat(64)} x`],
+      ['non-ASCII', `${'k'.repeat(64)}ї`],
+    ])('rejects a key that is %s, without echoing it', (_kind, key) => {
+      const message = errorMessageFor({ JWT_SECRET: key });
+      expect(message).toMatch(/JWT_SECRET: /);
+      expect(message).not.toContain('kkkk');
     });
   });
 

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * Environment variables, validated once at boot via `ConfigModule.forRoot`.
- * Error messages name the variable but never its value: the token is a secret.
+ * Error messages name the variable but never its value: several values are secrets.
  */
 
 /** TMDB read access tokens are long JWTs; anything this short is a mistake. */
@@ -21,6 +21,12 @@ const TOKEN_CHARSET = /^[A-Za-z0-9._-]+$/;
 
 /** TMDB's short v3 "API Key" (32 hex chars) — a common mix-up with the read access token. */
 const TMDB_V3_API_KEY = /^[0-9a-f]{32}$/i;
+
+/** 32 random bytes, written as hex or base64, take at least 64 characters. */
+const MIN_JWT_SECRET_LENGTH = 64;
+
+/** Hex, base64 and base64url alphabets. */
+const JWT_SECRET_CHARSET = /^[A-Za-z0-9+/=_-]+$/;
 
 /** Plain-http upstreams allowed in tests, so they can run a fake TMDB locally. */
 const LOCAL_TEST_HOSTS = new Set(['127.0.0.1', 'localhost']);
@@ -61,6 +67,21 @@ const EnvFields = z.object({
     })
     .default('https://api.themoviedb.org/3'),
   TMDB_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(5000),
+
+  DATABASE_URL: z
+    .string({ error: 'is required' })
+    .refine(isPostgresUrl, { error: 'must be a postgresql:// connection URL' }),
+
+  // Signs access tokens (HS256). Anyone who knows it can mint tokens for any user.
+  JWT_SECRET: z
+    .string({ error: 'is required' })
+    .min(MIN_JWT_SECRET_LENGTH, {
+      error: `is too short: use at least ${MIN_JWT_SECRET_LENGTH} characters (32 random bytes)`,
+      abort: true,
+    })
+    .regex(JWT_SECRET_CHARSET, {
+      error: 'may only contain letters, digits and "+", "/", "=", "_", "-" (hex or base64)',
+    }),
 });
 
 const EnvSchema = EnvFields.refine(
@@ -89,6 +110,11 @@ function isPlainBaseUrl(value: string): boolean {
     return true; // not a URL at all: already reported by z.url()
   }
   return !url.username && !url.password && !/[?#]/.test(value);
+}
+
+function isPostgresUrl(value: string): boolean {
+  const url = URL.parse(value);
+  return url?.protocol === 'postgresql:' && url.hostname !== '';
 }
 
 /** The validated, typed configuration. Use it as `ConfigService<Env, true>`. */

@@ -2,12 +2,15 @@ import { DeckResponseSchema } from '@reelmark/shared';
 
 import type { TmdbMovie } from '../tmdb/tmdb.schemas.js';
 import {
+  type CatalogMovie,
+  catalogMovieToCard,
   fillMissingOverviews,
   hasMissingOverviews,
   posterUrlFrom,
   ratingFrom,
   toDeckResponse,
   toMovieCard,
+  validPosterPath,
   yearFrom,
 } from './movie-card.mapper.js';
 
@@ -165,5 +168,79 @@ describe('toDeckResponse', () => {
   it('keeps a small total_pages as is', () => {
     const deck = toDeckResponse({ page: 1, total_pages: 0, results: [] }, genres);
     expect(deck).toEqual({ page: 1, totalPages: 0, items: [] });
+  });
+});
+
+describe('validPosterPath', () => {
+  it('returns a well-formed path unchanged and null for anything else', () => {
+    expect(validPosterPath('/abc.jpg')).toBe('/abc.jpg');
+    expect(validPosterPath('//evil.example/x.jpg')).toBeNull();
+    expect(validPosterPath(null)).toBeNull();
+  });
+});
+
+describe('catalogMovieToCard', () => {
+  function catalogMovie(
+    translations: { locale: string; title: string; overview: string }[],
+    overrides: Partial<CatalogMovie> = {},
+  ): CatalogMovie {
+    return {
+      id: 550,
+      posterPath: '/p.jpg',
+      releaseYear: 1999,
+      rating: 8.4,
+      genreIds: [53, 999],
+      updatedAt: new Date(),
+      translations: translations.map((t) => ({ movieId: 550, ...t })),
+      ...overrides,
+    };
+  }
+
+  it('builds a card in the requested language', () => {
+    const movie = catalogMovie([
+      { locale: 'en', title: 'Fight Club', overview: 'English' },
+      { locale: 'uk', title: 'Бійцівський клуб', overview: 'Українською' },
+    ]);
+
+    expect(catalogMovieToCard(movie, 'uk', genres)).toEqual({
+      id: 550,
+      title: 'Бійцівський клуб',
+      year: 1999,
+      overview: 'Українською',
+      posterUrl: 'https://image.tmdb.org/t/p/w780/p.jpg',
+      rating: 8.4,
+      genres: ['Thriller'],
+    });
+  });
+
+  it('falls back to the English overview when the requested one is blank', () => {
+    const movie = catalogMovie([
+      { locale: 'uk', title: 'Бійцівський клуб', overview: ' ' },
+      { locale: 'en', title: 'Fight Club', overview: 'English' },
+    ]);
+
+    expect(catalogMovieToCard(movie, 'uk', genres)).toMatchObject({
+      title: 'Бійцівський клуб',
+      overview: 'English',
+    });
+  });
+
+  it('takes the title from another language rather than dropping the card', () => {
+    const movie = catalogMovie([{ locale: 'uk', title: 'Бійцівський клуб', overview: 'Опис' }]);
+
+    // The Ukrainian overview is not used for an English card: only English is a fallback.
+    expect(catalogMovieToCard(movie, 'en', genres)).toMatchObject({
+      title: 'Бійцівський клуб',
+      overview: '',
+    });
+  });
+
+  it('returns null for an unusable poster or a movie without texts', () => {
+    const texts = [{ locale: 'en', title: 'Fight Club', overview: '' }];
+
+    expect(
+      catalogMovieToCard(catalogMovie(texts, { posterPath: 'x.gif' }), 'en', genres),
+    ).toBeNull();
+    expect(catalogMovieToCard(catalogMovie([]), 'en', genres)).toBeNull();
   });
 });

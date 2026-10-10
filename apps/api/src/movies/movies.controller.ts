@@ -2,20 +2,23 @@ import { Controller, Get, Query } from '@nestjs/common';
 
 import { type DeckQuery, DeckQuerySchema, type DeckResponse } from '@reelmark/shared';
 
+import type { AuthUser } from '../auth/auth-user.js';
+import { CurrentUser } from '../auth/auth.decorators.js';
 import { MoviesService } from './movies.service.js';
 
 @Controller('movies')
 export class MoviesController {
   constructor(private readonly movies: MoviesService) {}
 
-  /** `GET /api/v1/movies/deck?page=N&lang=uk|en`: one page of swipe cards. */
+  /** `GET /api/v1/movies/deck?page=N&lang=uk|en`: one page of swipe cards for the caller. */
   @Get('deck')
   getDeck(
+    @CurrentUser() user: AuthUser,
     // The global validation pipe parses the query with the shared schema, so
     // `page` is a number (default 1) and `lang` a supported locale (default
     // "en"). Invalid input is answered with a 400 before reaching this method.
     @Query({ schema: DeckQuerySchema }) query: DeckQuery,
   ): Promise<DeckResponse> {
-    return this.movies.getDeck(query.page, query.lang);
+    return this.movies.getDeck(query.page, query.lang, user.id);
   }
 }

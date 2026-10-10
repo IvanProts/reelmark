@@ -1,22 +1,18 @@
 import type { ServerResponse } from 'node:http';
 
-import {
-  BadGatewayException,
-  ConsoleLogger,
-  type INestApplication,
-  type Type,
-} from '@nestjs/common';
+import { BadGatewayException, ConsoleLogger, type Type } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import type { App } from 'supertest/types.js';
 
-import { type DeckResponse, DeckResponseSchema } from '@reelmark/shared';
+import { type AuthTokens, type DeckResponse, DeckResponseSchema } from '@reelmark/shared';
 
-import { configureApp } from '../src/app.setup.js';
+import { APP_OPTIONS, configureApp } from '../src/app.setup.js';
 import type { Env } from '../src/config/env.schema.js';
 import { TmdbClient } from '../src/tmdb/tmdb.client.js';
 import { type CapturedOutput, captureOutput } from './support/capture-output.js';
+import { bearer, resetDatabase, signIn } from './support/database.js';
 import { FakeHttpServer, type Handler, sendJson, sendText } from './support/fake-http-server.js';
 
 /**
@@ -96,13 +92,15 @@ let evil: FakeHttpServer;
 let evilOrigin: string;
 let upstreamOrigin: string;
 let AppModule: Type<unknown>;
-let app: INestApplication<App>;
+let app: NestExpressApplication;
+/** The signed-in test user; deck requests authenticate as them. */
+let session: AuthTokens;
 let output: CapturedOutput;
 
 const ENV_KEYS = ['TMDB_ACCESS_TOKEN', 'TMDB_BASE_URL', 'TMDB_TIMEOUT_MS'] as const;
 const savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 
-async function createApp(): Promise<INestApplication<App>> {
+async function createApp(): Promise<NestExpressApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
 
   // Safety net: these tests must never talk to the real TMDB.
@@ -114,7 +112,8 @@ async function createApp(): Promise<INestApplication<App>> {
   }
 
   // All log levels, so the leak checks see everything a production logger could print.
-  const nestApp = moduleRef.createNestApplication<INestApplication<App>>({
+  const nestApp = moduleRef.createNestApplication<NestExpressApplication>({
+    ...APP_OPTIONS,
     logger: new ConsoleLogger({ colors: false, logLevels: [...ALL_LOG_LEVELS] }),
   });
   configureApp(nestApp);
@@ -123,7 +122,7 @@ async function createApp(): Promise<INestApplication<App>> {
 }
 
 function getDeck(query = ''): request.Test {
-  return request(app.getHttpServer()).get(`/api/v1/movies/deck${query}`);
+  return request(app.getHttpServer()).get(`/api/v1/movies/deck${query}`).set(bearer(session));
 }
 
 function requestsTo(path: string): URL[] {
@@ -171,6 +170,8 @@ beforeEach(async () => {
   evil.reset(okDiscover);
   output = captureOutput();
   app = await createApp(); // fresh caches and rate-limit counters
+  await resetDatabase(app);
+  session = await signIn(app);
 });
 
 afterEach(async () => {
@@ -179,6 +180,8 @@ afterEach(async () => {
 
     const logs = output.text();
     expect(logs).not.toContain(TOKEN);
+    expect(logs).not.toContain(session.accessToken);
+    expect(logs).not.toContain(session.refreshToken);
     expect(logs).not.toContain(MARKER);
     expect(logs).not.toContain(evilOrigin);
 
@@ -225,8 +228,9 @@ describe('Requests to TMDB', () => {
 
   it('never forwards client query parameters or headers upstream', async () => {
     await getDeck('?page=2&sort_by=evil&include_adult=true&api_key=x&language=ru&with_genres=1')
+      // The caller's own Authorization header (our access token) must not be
+      // forwarded either: afterEach checks TMDB only ever sees the TMDB token.
       .set('Cookie', 'session=client-cookie')
-      .set('Authorization', 'Bearer client-supplied')
       .set('X-Forwarded-For', '203.0.113.7')
       .set('X-Api-Key', 'client-key')
       .expect(200);
@@ -607,6 +611,8 @@ describe('Fetch error messages', () => {
       TMDB_ACCESS_TOKEN: badToken,
       TMDB_BASE_URL: `${upstreamOrigin}/3`,
       TMDB_TIMEOUT_MS: TIMEOUT_MS,
+      DATABASE_URL: 'postgresql://unused@127.0.0.1/unused',
+      JWT_SECRET: 'unused-signing-material-'.repeat(3),
     };
     const client = new TmdbClient(new ConfigService<Env, true>(env));
 

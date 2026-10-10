@@ -1,14 +1,15 @@
-import { ConsoleLogger, type INestApplication, type Type } from '@nestjs/common';
+import { ConsoleLogger, type Type } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import type { App } from 'supertest/types.js';
 
-import { DeckResponseSchema, type MovieCard } from '@reelmark/shared';
+import { type AuthTokens, DeckResponseSchema, type MovieCard } from '@reelmark/shared';
 
-import { configureApp } from '../src/app.setup.js';
+import { APP_OPTIONS, configureApp } from '../src/app.setup.js';
 import type { Env } from '../src/config/env.schema.js';
 import { type CapturedOutput, captureOutput } from './support/capture-output.js';
+import { bearer, resetDatabase, signIn } from './support/database.js';
 import { FakeHttpServer, type Handler, sendJson } from './support/fake-http-server.js';
 
 /**
@@ -88,13 +89,15 @@ const fail500: Handler = (_req, res) => sendJson(res, 500, {});
 let upstream: FakeHttpServer;
 let upstreamOrigin: string;
 let AppModule: Type<unknown>;
-let app: INestApplication<App>;
+let app: NestExpressApplication;
+/** The signed-in test user; deck requests authenticate as them. */
+let session: AuthTokens;
 let output: CapturedOutput;
 
 const ENV_KEYS = ['TMDB_ACCESS_TOKEN', 'TMDB_BASE_URL', 'TMDB_TIMEOUT_MS'] as const;
 const savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 
-async function createApp(): Promise<INestApplication<App>> {
+async function createApp(): Promise<NestExpressApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
 
   // Safety net: these tests must never talk to the real TMDB.
@@ -105,7 +108,8 @@ async function createApp(): Promise<INestApplication<App>> {
     throw new Error('Refusing to run: TMDB_BASE_URL is not the local fake');
   }
 
-  const nestApp = moduleRef.createNestApplication<INestApplication<App>>({
+  const nestApp = moduleRef.createNestApplication<NestExpressApplication>({
+    ...APP_OPTIONS,
     logger: new ConsoleLogger({ colors: false }),
   });
   configureApp(nestApp);
@@ -114,7 +118,7 @@ async function createApp(): Promise<INestApplication<App>> {
 }
 
 function getDeck(query: string): request.Test {
-  return request(app.getHttpServer()).get(`/api/v1/movies/deck${query}`);
+  return request(app.getHttpServer()).get(`/api/v1/movies/deck${query}`).set(bearer(session));
 }
 
 function requestsTo(path: string): URL[] {
@@ -164,12 +168,15 @@ afterAll(async () => {
 beforeEach(async () => {
   output = captureOutput();
   app = await createApp(); // fresh caches and rate-limit counters
+  await resetDatabase(app);
+  session = await signIn(app);
 });
 
 afterEach(async () => {
   try {
     await app.close();
     expect(output.text()).not.toContain(TOKEN);
+    expect(output.text()).not.toContain(session.refreshToken);
     for (const req of upstream.requests) {
       const url = new URL(req.url, upstreamOrigin);
       expect(req.method).toBe('GET');
@@ -429,7 +436,7 @@ describe('Overview fallback', () => {
     ]);
   });
 
-  // TODO(phase-1): cache en-fallback failures — see docs/BACKLOG.md
+  // TODO(backlog): cache failed English overview fallbacks — see docs/BACKLOG.md
   it.fails('remembers a failed en fallback, so the next uk request is fast', async () => {
     upstream.reset(fakeTmdb({ 'uk-UA': [movie(1, { overview: '' })], 'en-US': hang }));
     await getDeck('?lang=uk').expect(200);

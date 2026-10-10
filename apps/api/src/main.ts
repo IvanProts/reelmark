@@ -4,14 +4,14 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 
 import { AppModule } from './app.module.js';
-import { configureApp } from './app.setup.js';
+import { APP_OPTIONS, configureApp } from './app.setup.js';
 import type { Env } from './config/env.schema.js';
 
 /** Process entry point: builds the app, applies the HTTP setup and starts listening. */
 async function bootstrap(): Promise<void> {
   // Env validation runs while AppModule is created, so invalid config stops the
   // process here with a message that names the bad variables.
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, APP_OPTIONS);
   configureApp(app);
 
   // Behind a reverse proxy, req.ip is the proxy's address and all clients would

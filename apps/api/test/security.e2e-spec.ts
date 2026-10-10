@@ -2,22 +2,24 @@ import { type IncomingHttpHeaders, request as httpRequest, STATUS_CODES } from '
 import { type AddressInfo, connect } from 'node:net';
 import { gzipSync } from 'node:zlib';
 
-import { type INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { getOptionsToken } from '@nestjs/throttler';
 
-import { DeckResponseSchema, type Locale } from '@reelmark/shared';
+import { type AuthTokens, DeckResponseSchema, type Locale } from '@reelmark/shared';
 
 import { AppModule } from '../src/app.module.js';
-import { configureApp } from '../src/app.setup.js';
-import { RATE_LIMIT } from '../src/config/rate-limit.js';
+import { APP_OPTIONS, configureApp } from '../src/app.setup.js';
+import { DECISIONS_RATE_LIMIT, RATE_LIMIT } from '../src/config/rate-limit.js';
 import { TmdbClient } from '../src/tmdb/tmdb.client.js';
 import type { TmdbDiscoverResponse } from '../src/tmdb/tmdb.schemas.js';
+import { resetDatabase, signIn } from './support/database.js';
 
 /**
- * Hostile input against the real HTTP stack: helmet, routing, body parsers,
- * the validation pipe, the throttler guard and the exception filter.
- * TmdbClient is faked, so nothing leaves the machine.
+ * Hostile input against the real HTTP stack: helmet, routing, body parsing,
+ * the auth and throttler guards, the validation pipe and the exception filter.
+ * TmdbClient is faked, so nothing leaves the machine. Requests carry a valid
+ * access token unless a test says otherwise.
  *
  * Requests go through node:http and raw sockets, which send the request target
  * byte for byte, without the URL normalisation higher-level clients apply
@@ -28,6 +30,9 @@ import type { TmdbDiscoverResponse } from '../src/tmdb/tmdb.schemas.js';
 const MARKER = 'INPUT_MARKER_5f2b';
 
 const LANG_ERROR = 'Invalid request. lang: Invalid option: expected one of "uk"|"en"';
+
+/** The session `send()` authenticates with; set by each suite after starting its app. */
+let session: AuthTokens | undefined;
 
 class FakeTmdbClient {
   discoverMovies = vi.fn((page: number, _locale: Locale): Promise<TmdbDiscoverResponse> =>
@@ -62,7 +67,7 @@ interface RawResponse {
 async function startApp(
   tmdb: FakeTmdbClient,
   options: { rateLimit?: number } = {},
-): Promise<{ app: INestApplication; port: number }> {
+): Promise<{ app: NestExpressApplication; port: number }> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(TmdbClient)
     .useValue(tmdb)
@@ -71,7 +76,10 @@ async function startApp(
       throttlers: [{ ...RATE_LIMIT, limit: options.rateLimit ?? 100_000 }],
     })
     .compile();
-  const app = moduleRef.createNestApplication({ logger: false });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({
+    ...APP_OPTIONS,
+    logger: false,
+  });
   configureApp(app);
   await app.listen(0, '127.0.0.1');
   const { port } = app.getHttpServer().address() as AddressInfo;
@@ -82,10 +90,13 @@ function send(
   port: number,
   method: string,
   path: string,
-  options: { headers?: Record<string, string>; body?: string | Buffer } = {},
+  options: { headers?: Record<string, string>; body?: string | Buffer; auth?: boolean } = {},
 ): Promise<RawResponse> {
-  const { body } = options;
-  const headers = { ...options.headers };
+  const { body, auth = true } = options;
+  const headers: Record<string, string> = {
+    ...(auth && session && { authorization: `Bearer ${session.accessToken}` }),
+    ...options.headers,
+  };
   if (body !== undefined) {
     headers['content-length'] = String(Buffer.byteLength(body));
   }
@@ -169,13 +180,15 @@ function expectSafeError(res: RawResponse, status: number): void {
 }
 
 describe('HTTP surface under hostile input', () => {
-  let app: INestApplication;
+  let app: NestExpressApplication;
   let port: number;
   let tmdb: FakeTmdbClient;
 
   beforeAll(async () => {
     tmdb = new FakeTmdbClient();
     ({ app, port } = await startApp(tmdb));
+    await resetDatabase(app);
+    session = await signIn(app);
   });
 
   afterAll(async () => {
@@ -314,7 +327,7 @@ describe('HTTP surface under hostile input', () => {
     });
   });
 
-  // Body parsers run before routing, for every method and route.
+  // Bodies are checked and parsed before routing, for every method and route.
   describe('Request bodies', () => {
     it.each<[string, Record<string, string>, string | Buffer, number]>([
       ['malformed JSON', { 'content-type': 'application/json' }, `{"page": ${MARKER}`, 400],
@@ -349,17 +362,33 @@ describe('HTTP surface under hostile input', () => {
         415,
       ],
       [
-        'too many urlencoded params',
-        { 'content-type': 'application/x-www-form-urlencoded' },
-        `${MARKER}=1&`.repeat(2_000),
+        'a 17 KB JSON body (over the 16 KB cap)',
+        { 'content-type': 'application/json' },
+        JSON.stringify({ big: 'x'.repeat(17 * 1024) }),
         413,
       ],
+      // JSON is the only accepted format: other bodies are refused unparsed.
       [
-        'deeply nested urlencoded keys',
+        'a urlencoded form with many params',
+        { 'content-type': 'application/x-www-form-urlencoded' },
+        `${MARKER}=1&`.repeat(2_000),
+        415,
+      ],
+      [
+        'a urlencoded form with deeply nested keys',
         { 'content-type': 'application/x-www-form-urlencoded' },
         `${MARKER}${'[a]'.repeat(64)}=1`,
-        400,
+        415,
       ],
+      [
+        'a multipart form',
+        { 'content-type': 'multipart/form-data; boundary=x' },
+        `--x\r\nContent-Disposition: form-data; name="a"\r\n\r\n${MARKER}\r\n--x--`,
+        415,
+      ],
+      ['plain text', { 'content-type': 'text/plain' }, MARKER, 415],
+      ['a body without a content type', {}, `{"page":${MARKER}}`, 415],
+      ['a +json media type', { 'content-type': 'application/merge-patch+json' }, '{}', 415],
     ])('rejects %s on GET and POST with %d', async (_name, headers, body, status) => {
       for (const method of ['GET', 'POST']) {
         const res = await send(port, method, '/api/v1/movies/deck', { headers, body });
@@ -561,7 +590,7 @@ describe('HTTP surface under hostile input', () => {
 });
 
 describe('Rate limiting', () => {
-  let app: INestApplication;
+  let app: NestExpressApplication;
   let port: number;
   let tmdb: FakeTmdbClient;
 
@@ -569,6 +598,7 @@ describe('Rate limiting', () => {
     tmdb = new FakeTmdbClient();
     // The production limit, not a reduced one.
     ({ app, port } = await startApp(tmdb, { rateLimit: RATE_LIMIT.limit }));
+    session = await signIn(app); // a new user, so a fresh per-user budget
   });
 
   afterEach(async () => {
@@ -599,6 +629,34 @@ describe('Rate limiting', () => {
     expect(Number(res.headers['retry-after'])).toBeLessThanOrEqual(RATE_LIMIT.ttl / 1000);
     expectSecurityHeaders(res.headers);
     expect(tmdb.discoverMovies).not.toHaveBeenCalled();
+  });
+
+  it('counts authenticated requests per user, so another user keeps their own budget', async () => {
+    await exhaust();
+    expect((await send(port, 'GET', '/api/v1/movies/deck')).status).toBe(429);
+
+    session = await signIn(app);
+
+    expect((await send(port, 'GET', '/api/v1/movies/deck')).status).toBe(200);
+  });
+
+  it(`gives decisions their own limit of ${DECISIONS_RATE_LIMIT.limit} per window, per route`, async () => {
+    await send(port, 'GET', '/api/v1/movies/deck'); // puts movie 1 into the catalog
+    const save = () =>
+      send(port, 'PUT', '/api/v1/me/decisions/1', {
+        headers: { 'content-type': 'application/json' },
+        body: '{"status":"not_seen"}',
+      });
+
+    const first = await save();
+    expect(first.headers['x-ratelimit-limit']).toBe(String(DECISIONS_RATE_LIMIT.limit));
+    for (let i = 1; i < DECISIONS_RATE_LIMIT.limit; i++) {
+      expect((await save()).status).toBe(200); // well past the default 60
+    }
+
+    expect((await save()).status).toBe(429);
+    // Undo is a separate route with its own budget.
+    expect((await send(port, 'DELETE', '/api/v1/me/decisions/1')).status).toBe(204);
   });
 
   it('cannot be bypassed with spoofed proxy headers (trust proxy is off)', async () => {
@@ -645,7 +703,7 @@ describe('Rate limiting', () => {
     }
   });
 
-  // Guards run only for matched routes, so 404s and body-parser rejections
+  // Guards run only for matched routes, so 404s and rejected bodies
   // (400/413/415) are never rate-limited. They are cheap to answer.
   it('does not limit unmatched routes or body-parser rejections', async () => {
     for (let i = 0; i < RATE_LIMIT.limit + 5; i++) {

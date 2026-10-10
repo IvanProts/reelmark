@@ -1,14 +1,15 @@
-import { BadGatewayException, type INestApplication, Logger } from '@nestjs/common';
+import { BadGatewayException, Logger } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import type { App } from 'supertest/types.js';
 
-import { DeckResponseSchema, type Locale } from '@reelmark/shared';
+import { type AuthTokens, DeckResponseSchema, type Locale } from '@reelmark/shared';
 
 import { AppModule } from '../src/app.module.js';
-import { configureApp } from '../src/app.setup.js';
+import { APP_OPTIONS, configureApp } from '../src/app.setup.js';
 import { TmdbClient } from '../src/tmdb/tmdb.client.js';
 import type { TmdbDiscoverResponse, TmdbMovie } from '../src/tmdb/tmdb.schemas.js';
+import { bearer, resetDatabase, signIn } from './support/database.js';
 
 /**
  * The public HTTP contract: routes, query parameters, response bodies and the
@@ -52,11 +53,13 @@ class FakeTmdbClient {
   );
 }
 
-let app: INestApplication<App>;
+let app: NestExpressApplication;
 let tmdb: FakeTmdbClient;
+let session: AuthTokens;
 
+/** An authenticated GET, as the app sends it. */
 function get(path: string): request.Test {
-  return request(app.getHttpServer()).get(path);
+  return request(app.getHttpServer()).get(path).set(bearer(session));
 }
 
 beforeAll(async () => {
@@ -65,9 +68,11 @@ beforeAll(async () => {
     .overrideProvider(TmdbClient)
     .useValue(tmdb)
     .compile();
-  app = moduleRef.createNestApplication<INestApplication<App>>({ logger: false });
+  app = moduleRef.createNestApplication<NestExpressApplication>({ ...APP_OPTIONS, logger: false });
   configureApp(app);
   await app.init();
+  await resetDatabase(app);
+  session = await signIn(app);
 });
 
 afterAll(async () => {
@@ -79,6 +84,13 @@ beforeEach(() => {
 });
 
 describe('GET /api/v1/movies/deck', () => {
+  it('requires an access token', async () => {
+    const res = await request(app.getHttpServer()).get('/api/v1/movies/deck').expect(401);
+
+    expect(res.body).toEqual({ statusCode: 401, message: 'Unauthorized' });
+    expect(tmdb.discoverMovies).not.toHaveBeenCalled();
+  });
+
   it('returns a deck that matches DeckResponseSchema', async () => {
     const res = await get('/api/v1/movies/deck').expect(200);
 
@@ -185,8 +197,8 @@ describe('GET /api/v1/movies/deck', () => {
 });
 
 describe('GET /api/v1/health', () => {
-  it('returns { status: "ok" }', async () => {
-    await get('/api/v1/health').expect(200).expect({ status: 'ok' });
+  it('returns { status: "ok" } without an access token', async () => {
+    await request(app.getHttpServer()).get('/api/v1/health').expect(200).expect({ status: 'ok' });
   });
 });
 

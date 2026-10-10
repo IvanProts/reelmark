@@ -1,11 +1,12 @@
-import type { DeckResponse, MovieCard } from '@reelmark/shared';
+import type { DeckResponse, Locale, MovieCard } from '@reelmark/shared';
 
+import type { Movie, MovieTranslation } from '../generated/prisma/client.js';
 import type { GenreMap } from '../tmdb/tmdb.client.js';
 import type { TmdbDiscoverResponse, TmdbMovie } from '../tmdb/tmdb.schemas.js';
 
 /**
- * Pure functions that map validated TMDB data to the shared API contract
- * (`@reelmark/shared`). No framework code and no I/O.
+ * Pure functions that build `MovieCard`s, the shared API contract, from validated TMDB data and
+ * from catalog rows. No framework code and no I/O.
  */
 
 const POSTER_BASE_URL = 'https://image.tmdb.org/t/p/w780';
@@ -78,14 +79,56 @@ export function toMovieCard(movie: TmdbMovie, genres: GenreMap): MovieCard | nul
     overview: movie.overview,
     posterUrl,
     rating: ratingFrom(movie.vote_average),
-    // Genre ids missing from the genre list are dropped.
-    genres: movie.genre_ids.map((id) => genres.get(id)).filter((name) => name !== undefined),
+    genres: genreNames(movie.genre_ids, genres),
   };
+}
+
+/** A catalog movie with all of its stored translations. */
+export type CatalogMovie = Movie & { translations: MovieTranslation[] };
+
+/**
+ * Builds a card from the catalog in `locale`. The title falls back to English, then to any stored
+ * language; a blank overview falls back to English only. Returns null when the poster is unusable
+ * or no translation is stored.
+ */
+export function catalogMovieToCard(
+  movie: CatalogMovie,
+  locale: Locale,
+  genres: GenreMap,
+): MovieCard | null {
+  const posterUrl = posterUrlFrom(movie.posterPath);
+  const inLocale = movie.translations.find((t) => t.locale === locale);
+  const inEnglish = movie.translations.find((t) => t.locale === 'en');
+  const title = (inLocale ?? inEnglish ?? movie.translations[0])?.title;
+  if (!posterUrl || title === undefined) {
+    return null;
+  }
+  const overview = [inLocale, inEnglish].find((t) => t && !isBlank(t.overview))?.overview ?? '';
+  return {
+    id: movie.id,
+    title,
+    year: movie.releaseYear,
+    overview,
+    posterUrl,
+    rating: ratingFrom(movie.rating),
+    genres: genreNames(movie.genreIds, genres),
+  };
+}
+
+/** Genre names for `ids`; ids missing from the genre list are dropped. */
+function genreNames(ids: readonly number[], genres: GenreMap): string[] {
+  return ids.map((id) => genres.get(id)).filter((name) => name !== undefined);
+}
+
+/** The poster path if it has the shape of a TMDB image path, otherwise null. */
+export function validPosterPath(posterPath: string | null | undefined): string | null {
+  return posterPath && POSTER_PATH.test(posterPath) ? posterPath : null;
 }
 
 /** Absolute poster URL, or null when the path is missing or malformed. */
 export function posterUrlFrom(posterPath: string | null | undefined): string | null {
-  return posterPath && POSTER_PATH.test(posterPath) ? `${POSTER_BASE_URL}${posterPath}` : null;
+  const path = validPosterPath(posterPath);
+  return path ? `${POSTER_BASE_URL}${path}` : null;
 }
 
 /** "2019-05-30" → 2019; null when missing or not a real date. */
