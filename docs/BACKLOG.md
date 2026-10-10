@@ -11,7 +11,7 @@ Known follow-ups, deliberately deferred. Code that depends on an item references
   readers pronounce English text with an English voice.
 - **A global TMDB budget** on top of the per-user rate limits, so many accounts together can't
   exhaust our TMDB quota.
-- **Upstream URLs for per-movie endpoints** (details, recommendations) built with `new URL()` from
+- **Upstream URLs for per-movie endpoints** (details, videos, watch providers) built with `new URL()` from
   validated ids.
 
 ## Accounts

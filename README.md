@@ -24,8 +24,8 @@
 
 Reelmark is a mobile movie library you build by swiping. Movie fans who have watched hundreds of
 films lose track of what they've already seen — and finding something new gets harder every time.
-Reelmark shows one movie at a time: mark it as seen or not, and the app builds your personal
-library and, next, recommendations based on it.
+Reelmark shows one movie at a time: mark it as seen, not seen or want to watch, and the app
+builds your personal library.
 
 <p align="center">
   <img src="docs/screenshots/swipe-uk.png" width="200" alt="Swiping a movie up to the watchlist">
@@ -50,7 +50,8 @@ library and, next, recommendations based on it.
 - **Secure by design**: the app holds no secrets — see [Security](#security)
 
 **Status:** early development. Swiping, accounts and the library (Phase 1) are complete;
-recommendations (Phase 2) are next — see the [roadmap](docs/ROADMAP.md).
+a decision card with trailers and critics' scores (Phase 1.5) is next — see the
+[roadmap](docs/ROADMAP.md).
 
 ## Tech stack
 
