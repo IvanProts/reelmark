@@ -2,8 +2,8 @@
 
 The Reelmark REST API, built with NestJS 12 (ESM) on Express, Prisma 7 and PostgreSQL 17. It gives
 the mobile app anonymous accounts, a deck of movie cards in Ukrainian or English, saved swipe
-decisions and a library. It is the only component that holds secrets and talks to
-[TMDB](https://www.themoviedb.org): every endpoint maps to a fixed upstream call with validated
+decisions, a library and movie details. It is the only component that holds secrets and talks to
+[TMDB](https://www.themoviedb.org) and [Wikidata](https://www.wikidata.org): every endpoint maps to a fixed upstream call with validated
 parameters, TMDB responses are treated as untrusted input, and everything is mapped to the shared
 contract in [`@reelmark/shared`](../../packages/shared) before it reaches a client.
 
@@ -14,18 +14,19 @@ All routes live under `/api/v1`. Every route except `/health` and `/auth/*` requ
 `{ "statusCode": number, "message": string }`; every authentication failure is the same
 `401 { "statusCode": 401, "message": "Unauthorized" }`.
 
-| Method | Path                     | Input                                                                          | Success                                                  |
-| ------ | ------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| POST   | `/auth/anonymous`        | none                                                                           | `201` `AuthTokens` (new account)                         |
-| POST   | `/auth/refresh`          | `{ refreshToken }`                                                             | `200` `AuthTokens` (the refresh token is rotated)        |
-| GET    | `/movies/deck`           | `page`: 1–500, default 1 · `lang`: `uk` \| `en`, default `en`                  | `200` `DeckResponse` without the caller's sorted movies  |
-| GET    | `/me`                    | none                                                                           | `200` `Me`                                               |
-| PATCH  | `/me`                    | `{ locale }`                                                                   | `200` `Me`                                               |
-| DELETE | `/me`                    | none                                                                           | `204`; the account and all its data are deleted          |
-| PUT    | `/me/decisions/:movieId` | `{ status: "seen" \| "not_seen" \| "want", liked? }` (`liked` only for `seen`) | `200` `Decision`; `404` if the movie was never in a deck |
-| DELETE | `/me/decisions/:movieId` | none                                                                           | `204`, also when there was no decision                   |
-| GET    | `/me/library`            | `status`: `seen` \| `want` · `lang` · `limit`: 1–60, default 30 · `cursor`     | `200` `LibraryPage`, newest decision first               |
-| GET    | `/health`                | none                                                                           | `200` `{ "status": "ok" }`                               |
+| Method | Path                       | Input                                                                                   | Success                                                             |
+| ------ | -------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| POST   | `/auth/anonymous`          | none                                                                                    | `201` `AuthTokens` (new account)                                    |
+| POST   | `/auth/refresh`            | `{ refreshToken }`                                                                      | `200` `AuthTokens` (the refresh token is rotated)                   |
+| GET    | `/movies/deck`             | `page`: 1–500, default 1 · `lang`: `uk` \| `en`, default `en`                           | `200` `DeckResponse` without the caller's sorted movies             |
+| GET    | `/movies/:movieId/details` | `lang`: `uk` \| `en`, default `en` · `region`: `UA`, `US`, … (ISO 3166-1), default `US` | `200` `MovieDetails`; `404` if TMDB has no such movie               |
+| GET    | `/me`                      | none                                                                                    | `200` `Me`                                                          |
+| PATCH  | `/me`                      | `{ locale }`                                                                            | `200` `Me`                                                          |
+| DELETE | `/me`                      | none                                                                                    | `204`; the account and all its data are deleted                     |
+| PUT    | `/me/decisions/:movieId`   | `{ status: "seen" \| "not_seen" \| "want", liked? }` (`liked` only for `seen`)          | `200` `Decision`; `404` if the movie was never in a deck or details |
+| DELETE | `/me/decisions/:movieId`   | none                                                                                    | `204`, also when there was no decision                              |
+| GET    | `/me/library`              | `status`: `seen` \| `want` · `lang` · `limit`: 1–60, default 30 · `cursor`              | `200` `LibraryPage`, newest decision first                          |
+| GET    | `/health`                  | none                                                                                    | `200` `{ "status": "ok" }`                                          |
 
 Other responses: `400` invalid input (the message names the field), `401`, `413` body over 16 KB,
 `415` non-JSON body, `429` rate limit, `502` TMDB unavailable, `500` unexpected error. Integers in
@@ -35,22 +36,35 @@ ignored. Unknown routes and unsupported methods answer `404`.
 A deck page can hold fewer cards than TMDB's page, even none, because sorted movies are left out;
 the app then asks for the next page.
 
+Movie details work for any TMDB movie id (with a poster), not only movies already served in a deck:
+
+- `movie` is the `MovieCard`; a blank overview is taken from English.
+- `trailer` is an official YouTube trailer in `lang`, then in English, then an unofficial one;
+  only the 11-character video id is sent. `null` when there is none.
+- `certification` is the region's age rating, or the US one when the region has none.
+- `cast` is the top five billed actors; `directors` come from the crew.
+- `watch` lists the region's streaming (`stream`), `rent` and `buy` offers (data by JustWatch,
+  which the app credits), with logos on `image.tmdb.org` and a `link` only to `www.themoviedb.org`.
+- `critics` holds the latest Rotten Tomatoes and Metacritic scores from Wikidata (0–100), each
+  `null` when unknown or when Wikidata is unavailable; Wikidata never fails the request.
+
 ## Configuration
 
 Environment variables are validated at boot. Invalid configuration stops the process with a
 message that names each bad variable, never its value. `pnpm setup:env` (repository root) creates
 `apps/api/.env` from `.env.example` and generates the database password and JWT secret.
 
-| Variable            | Required | Default                        | Description                                                                                                                                         |
-| ------------------- | -------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TMDB_ACCESS_TOKEN` | yes      | none                           | TMDB "API Read Access Token" (sent as a Bearer token), not the short v3 "API Key". At least 32 characters from `A–Z a–z 0–9 . _ -`.                 |
-| `DATABASE_URL`      | yes      | none                           | PostgreSQL connection URL (`postgresql://…`).                                                                                                       |
-| `JWT_SECRET`        | yes      | none                           | Key that signs access tokens: at least 64 characters of hex or base64 (32 random bytes).                                                            |
-| `NODE_ENV`          | no       | `development`                  | `development`, `production` or `test`. A process started with `NODE_ENV=test` never loads the env file, and may use a plain-http TMDB on localhost. |
-| `HOST`              | no       | `127.0.0.1`                    | Interface to listen on. `0.0.0.0` exposes the API to the local network (e.g. for a physical phone).                                                 |
-| `PORT`              | no       | `3000`                         | Port to listen on, 1–65535.                                                                                                                         |
-| `TMDB_BASE_URL`     | no       | `https://api.themoviedb.org/3` | TMDB API base URL. Must use HTTPS and contain no credentials, query string or fragment.                                                             |
-| `TMDB_TIMEOUT_MS`   | no       | `5000`                         | Time limit for each TMDB request, including reading the body, 100–60000.                                                                            |
+| Variable              | Required | Default                             | Description                                                                                                                                         |
+| --------------------- | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TMDB_ACCESS_TOKEN`   | yes      | none                                | TMDB "API Read Access Token" (sent as a Bearer token), not the short v3 "API Key". At least 32 characters from `A–Z a–z 0–9 . _ -`.                 |
+| `DATABASE_URL`        | yes      | none                                | PostgreSQL connection URL (`postgresql://…`).                                                                                                       |
+| `JWT_SECRET`          | yes      | none                                | Key that signs access tokens: at least 64 characters of hex or base64 (32 random bytes).                                                            |
+| `NODE_ENV`            | no       | `development`                       | `development`, `production` or `test`. A process started with `NODE_ENV=test` never loads the env file, and may use a plain-http TMDB on localhost. |
+| `HOST`                | no       | `127.0.0.1`                         | Interface to listen on. `0.0.0.0` exposes the API to the local network (e.g. for a physical phone).                                                 |
+| `PORT`                | no       | `3000`                              | Port to listen on, 1–65535.                                                                                                                         |
+| `TMDB_BASE_URL`       | no       | `https://api.themoviedb.org/3`      | TMDB API base URL. Must use HTTPS and contain no credentials, query string or fragment.                                                             |
+| `TMDB_TIMEOUT_MS`     | no       | `5000`                              | Time limit for each TMDB request, including reading the body, 100–60000.                                                                            |
+| `WIKIDATA_SPARQL_URL` | no       | `https://query.wikidata.org/sparql` | Wikidata SPARQL endpoint for critics' scores (also limited by `TMDB_TIMEOUT_MS`). Same rules as `TMDB_BASE_URL`.                                    |
 
 ## Data model
 
@@ -95,9 +109,10 @@ src/
   me/               GET / PATCH / DELETE /me
   decisions/        PUT / DELETE /me/decisions/:movieId
   library/          GET /me/library with keyset cursors
-  movies/           GET /movies/deck and the MovieCard mappers
+  movies/           GET /movies/deck, GET /movies/:movieId/details and their mappers
   catalog/          stores served movies for decisions and the library
   tmdb/             TmdbClient (the only code that calls TMDB), response schemas, locale mapping
+  wikidata/         WikidataClient (critics' scores via one fixed SPARQL query) and its parsing
   common/           exception filter, validation pipe, per-user throttler guard, AsyncCache
   health/           GET /health
 ```
@@ -128,13 +143,15 @@ cached TMDB genre list.
 
 ### Caching
 
-`TmdbClient` keeps in-memory caches built on `AsyncCache`, which also lets concurrent identical
-requests share one upstream call:
+`TmdbClient`, `MovieDetailsService` and `WikidataClient` keep in-memory caches built on
+`AsyncCache`, which also lets concurrent identical requests share one upstream call:
 
-| Data           | Key           | Lifetime                                         |
-| -------------- | ------------- | ------------------------------------------------ |
-| Discover pages | locale + page | 10 minutes, at most 200 entries; successes only  |
-| Genre lists    | locale        | 24 hours; a failure is remembered for 60 seconds |
+| Data            | Key                      | Lifetime                                                             |
+| --------------- | ------------------------ | -------------------------------------------------------------------- |
+| Discover pages  | locale + page            | 10 minutes, at most 200 entries; successes only                      |
+| Genre lists     | locale                   | 24 hours; a failure is remembered for 60 seconds                     |
+| Movie details   | movie id + lang + region | 24 hours, at most 1000 entries; successes only                       |
+| Critics' scores | movie id                 | 7 days, at most 5000 entries; a failure is remembered for 10 minutes |
 
 Caches and rate-limit counters live in process memory, so running several instances would need a
 shared store.
@@ -148,7 +165,16 @@ shared store.
   movie is dropped instead of failing the page. String fields have length caps, and poster paths
   must match TMDB's file-name pattern.
 - Any upstream failure is logged as `TMDB GET <path> failed: <reason>` and answered with a generic
-  `502`. A failed genre list or English fallback only degrades the deck.
+  `502`. A failed genre list or English fallback only degrades the deck. TMDB's 404 for a movie's
+  details is answered with a generic `404`.
+- The appended details sections (videos, credits, release dates, watch providers) are validated
+  item by item, so a malformed entry is dropped and a malformed section counts as empty. Trailer
+  ids must match `^[A-Za-z0-9_-]{11}$`, logos must be TMDB image paths, and where-to-watch links
+  must be `https://www.themoviedb.org/…`.
+- Wikidata gets the same treatment: one fixed query whose only variable is the validated integer
+  id, a descriptive `User-Agent`, no redirects, the `TMDB_TIMEOUT_MS` limit, a 256 KB cap and zod
+  parsing. A failure is logged as `Wikidata scores for movie <id> unavailable: <reason>` and gives
+  null scores.
 
 ## Security notes
 
@@ -195,22 +221,23 @@ Start the local database first with `pnpm db:up`.
 
 ## Testing
 
-No test calls the real TMDB API or reads a developer's env file.
+No test calls the real TMDB API or Wikidata, or reads a developer's env file.
 
 **Unit tests** (`src/**/*.spec.ts`) cover the env schema, token service, auth guard, throttler
-tracker, library cursor, mappers, `MoviesService`, `AsyncCache`, the exception filter's log
+tracker, library cursor, mappers (cards, details), critics' score parsing, `MoviesService`, `AsyncCache`, the exception filter's log
 formatting, and `TmdbClient` with a mocked `fetch`.
 
 **End-to-end tests** (`test/*.e2e-spec.ts`) boot the real Nest application against the
 `reelmark_test` database. A global setup applies the migrations with `prisma migrate deploy`; the
 suites run one at a time and empty the tables between tests.
 
-| Suite                 | Covers                                                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `http-contract`       | Routes, query parameters, response bodies and the `ApiError` shape, with `TmdbClient` faked.                                             |
-| `auth`                | Sign-up, forged and expired access tokens, refresh rotation, reuse and concurrency, deleted accounts, auth rate limits.                  |
-| `account`             | `/me`, decisions, the library and its cursor, deck exclusion, catalog writes, isolation between users, deletion cascade, body limits.    |
-| `security`            | Hostile input (queries, bodies, methods, paths), security headers and rate limiting, with `TmdbClient` faked.                            |
-| `tmdb-integration`    | The real `TmdbClient` and `fetch` against a local fake TMDB: request shape, redirects, failures, parsing, size cap, poster paths, leaks. |
-| `lang-cache-fallback` | Languages, the discover and genre caches, and the English overview fallback, through the real client.                                    |
-| `env-boot`            | Booting with invalid configuration fails and never prints a provided value.                                                              |
+| Suite                 | Covers                                                                                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http-contract`       | Routes, query parameters, response bodies and the `ApiError` shape, with `TmdbClient` faked.                                                         |
+| `auth`                | Sign-up, forged and expired access tokens, refresh rotation, reuse and concurrency, deleted accounts, auth rate limits.                              |
+| `account`             | `/me`, decisions, the library and its cursor, deck exclusion, catalog writes, isolation between users, deletion cascade, body limits.                |
+| `security`            | Hostile input (queries, bodies, methods, paths), security headers and rate limiting, with `TmdbClient` faked.                                        |
+| `tmdb-integration`    | The real `TmdbClient` and `fetch` against a local fake TMDB: request shape, redirects, failures, parsing, size cap, poster paths, leaks.             |
+| `lang-cache-fallback` | Languages, the discover and genre caches, and the English overview fallback, through the real client.                                                |
+| `movie-details`       | Movie details through the real TMDB and Wikidata clients against local fakes: contract, validation, 404, Wikidata failures, caching, catalog, leaks. |
+| `env-boot`            | Booting with invalid configuration fails and never prints a provided value.                                                                          |

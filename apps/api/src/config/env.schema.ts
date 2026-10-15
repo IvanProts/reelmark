@@ -28,7 +28,7 @@ const MIN_JWT_SECRET_LENGTH = 64;
 /** Hex, base64 and base64url alphabets. */
 const JWT_SECRET_CHARSET = /^[A-Za-z0-9+/=_-]+$/;
 
-/** Plain-http upstreams allowed in tests, so they can run a fake TMDB locally. */
+/** Plain-http upstreams allowed in tests, so they can run fake TMDB and Wikidata servers locally. */
 const LOCAL_TEST_HOSTS = new Set(['127.0.0.1', 'localhost']);
 
 /** Per-variable rules. Env values are strings, so numbers are coerced. */
@@ -68,6 +68,15 @@ const EnvFields = z.object({
     .default('https://api.themoviedb.org/3'),
   TMDB_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(5000),
 
+  // Wikidata's public SPARQL endpoint, for critics' scores. Only tests point it elsewhere.
+  WIKIDATA_SPARQL_URL: z
+    .url({ protocol: /^https?$/, error: 'must be a valid http(s) URL' })
+    // The client sets the query string itself.
+    .refine(isPlainBaseUrl, {
+      error: 'must not contain credentials, a query ("?") or a fragment ("#")',
+    })
+    .default('https://query.wikidata.org/sparql'),
+
   DATABASE_URL: z
     .string({ error: 'is required' })
     .refine(isPostgresUrl, { error: 'must be a postgresql:// connection URL' }),
@@ -84,25 +93,39 @@ const EnvFields = z.object({
     }),
 });
 
+const HTTPS_REQUIRED = 'must use https (http is allowed only for localhost when NODE_ENV=test)';
+
 const EnvSchema = EnvFields.refine(
   // The token travels in a header, so the upstream must use HTTPS. The only
   // exception is a fake TMDB on localhost during tests.
-  (env) => {
-    const url = URL.parse(env.TMDB_BASE_URL);
-    const isLocalTestUpstream =
-      env.NODE_ENV === 'test' && LOCAL_TEST_HOSTS.has(url?.hostname ?? '');
-    return url?.protocol === 'https:' || isLocalTestUpstream;
-  },
+  (env) => isHttpsOrLocalTest(env.TMDB_BASE_URL, env.NODE_ENV),
   {
     path: ['TMDB_BASE_URL'],
-    error: 'must use https (http is allowed only for localhost when NODE_ENV=test)',
+    error: HTTPS_REQUIRED,
     // Zod skips object-level rules while any field is invalid. This rule only
     // needs NODE_ENV and TMDB_BASE_URL, so it runs whenever those two are
     // valid, and a single boot reports every problem.
     when: (payload) =>
       EnvFields.pick({ NODE_ENV: true, TMDB_BASE_URL: true }).safeParse(payload.value).success,
   },
+).refine(
+  // Scores shown as facts must not be open to tampering in transit.
+  (env) => isHttpsOrLocalTest(env.WIKIDATA_SPARQL_URL, env.NODE_ENV),
+  {
+    path: ['WIKIDATA_SPARQL_URL'],
+    error: HTTPS_REQUIRED,
+    when: (payload) =>
+      EnvFields.pick({ NODE_ENV: true, WIKIDATA_SPARQL_URL: true }).safeParse(payload.value)
+        .success,
+  },
 );
+
+/** HTTPS, or plain http to a fake upstream on localhost when NODE_ENV=test. */
+function isHttpsOrLocalTest(value: string, nodeEnv: string): boolean {
+  const url = URL.parse(value);
+  const isLocalTestUpstream = nodeEnv === 'test' && LOCAL_TEST_HOSTS.has(url?.hostname ?? '');
+  return url?.protocol === 'https:' || isLocalTestUpstream;
+}
 
 function isPlainBaseUrl(value: string): boolean {
   const url = URL.parse(value);

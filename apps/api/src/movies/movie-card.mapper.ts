@@ -62,7 +62,8 @@ export function hasMissingOverviews(deck: DeckResponse): boolean {
   return deck.items.some((card) => isBlank(card.overview));
 }
 
-function isBlank(text: string): boolean {
+/** True for an empty or whitespace-only text. */
+export function isBlank(text: string): boolean {
   return text.trim() === '';
 }
 

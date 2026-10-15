@@ -35,6 +35,7 @@ describe('validateEnv', () => {
       PORT: 3000,
       TMDB_BASE_URL: 'https://api.themoviedb.org/3',
       TMDB_TIMEOUT_MS: 5000,
+      WIKIDATA_SPARQL_URL: 'https://query.wikidata.org/sparql',
     });
   });
 
@@ -152,6 +153,41 @@ describe('validateEnv', () => {
       expect(errorMessageFor({ TMDB_ACCESS_TOKEN: TOKEN, TMDB_BASE_URL: url })).toMatch(
         /TMDB_BASE_URL/,
       );
+    });
+  });
+
+  describe('WIKIDATA_SPARQL_URL', () => {
+    it('rejects plain http outside the test environment, even to localhost', () => {
+      for (const NODE_ENV of ['development', 'production']) {
+        expect(
+          errorMessageFor({ NODE_ENV, WIKIDATA_SPARQL_URL: 'http://127.0.0.1:4020/sparql' }),
+        ).toMatch(/WIKIDATA_SPARQL_URL: must use https/);
+      }
+    });
+
+    it('allows http to localhost only when NODE_ENV=test', () => {
+      const env = validateEnv({
+        ...REQUIRED,
+        NODE_ENV: 'test',
+        WIKIDATA_SPARQL_URL: 'http://localhost:4020/sparql',
+      });
+      expect(env.WIKIDATA_SPARQL_URL).toBe('http://localhost:4020/sparql');
+
+      expect(
+        errorMessageFor({ NODE_ENV: 'test', WIKIDATA_SPARQL_URL: 'http://example.com/sparql' }),
+      ).toMatch(/WIKIDATA_SPARQL_URL: must use https/);
+    });
+
+    it.each([
+      'https://user:pass@query.wikidata.org/sparql',
+      'https://query.wikidata.org/sparql?query=x',
+      'https://query.wikidata.org/sparql#frag',
+      'not a url',
+      'ftp://query.wikidata.org/sparql',
+    ])('rejects %s', (url) => {
+      const message = errorMessageFor({ WIKIDATA_SPARQL_URL: url });
+      expect(message).toMatch(/WIKIDATA_SPARQL_URL/);
+      expect(message).not.toContain('pass');
     });
   });
 

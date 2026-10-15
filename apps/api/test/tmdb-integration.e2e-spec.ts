@@ -611,6 +611,7 @@ describe('Fetch error messages', () => {
       TMDB_ACCESS_TOKEN: badToken,
       TMDB_BASE_URL: `${upstreamOrigin}/3`,
       TMDB_TIMEOUT_MS: TIMEOUT_MS,
+      WIKIDATA_SPARQL_URL: 'http://127.0.0.1:9/sparql',
       DATABASE_URL: 'postgresql://unused@127.0.0.1/unused',
       JWT_SECRET: 'unused-signing-material-'.repeat(3),
     };

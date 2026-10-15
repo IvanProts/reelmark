@@ -23,6 +23,14 @@ export class CatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Stores one movie with its texts in `locale`, e.g. from the details sheet. A movie without a
+   * usable poster is skipped.
+   */
+  saveMovie(locale: Locale, movie: TmdbMovie): Promise<void> {
+    return this.saveDiscoverPage(locale, [movie]);
+  }
+
+  /**
    * Stores the movies of a served discover page with their texts in `locale`. `englishMovies` is
    * the English version of the page, when it was loaded to fill missing overviews; its texts are
    * stored as the English translation. Movies without a usable poster are skipped, as in the deck.

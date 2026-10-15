@@ -23,6 +23,7 @@ const env: Env = {
   TMDB_ACCESS_TOKEN: TOKEN,
   TMDB_BASE_URL: 'https://tmdb.example/3/', // the client must drop the trailing slash
   TMDB_TIMEOUT_MS: 50,
+  WIKIDATA_SPARQL_URL: 'https://wikidata.example/sparql',
   DATABASE_URL: 'postgresql://unused@127.0.0.1/unused',
   JWT_SECRET: 'unused-signing-material-'.repeat(3),
 };

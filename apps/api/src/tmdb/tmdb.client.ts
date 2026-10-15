@@ -1,10 +1,11 @@
-import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
+import { BadGatewayException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ZodType } from 'zod';
 
 import { type Locale, SUPPORTED_LOCALES } from '@reelmark/shared';
 
 import { AsyncCache } from '../common/async-cache.js';
+import { describeFetchError, readTextUpTo } from '../common/upstream-response.js';
 import type { Env } from '../config/env.schema.js';
 import { TMDB_LANGUAGE } from './tmdb-language.js';
 import {
@@ -12,6 +13,8 @@ import {
   type TmdbDiscoverResponse,
   TmdbDiscoverEnvelopeSchema,
   TmdbGenreListSchema,
+  type TmdbMovieDetails,
+  TmdbMovieDetailsSchema,
 } from './tmdb.schemas.js';
 
 /** TMDB's genre list rarely changes, so it is fetched once a day. */
@@ -29,6 +32,9 @@ export const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 const DISCOVER_PATH = '/discover/movie';
 const GENRES_PATH = '/genre/movie/list';
+const MOVIE_PATH = '/movie';
+/** Everything the details sheet shows, in one call. */
+const DETAILS_APPENDS = 'videos,credits,release_dates,watch/providers';
 
 export type GenreMap = ReadonlyMap<number, string>;
 
@@ -85,6 +91,27 @@ export class TmdbClient {
     return this.genreCache.get(locale, () => this.fetchGenres(locale));
   }
 
+  /**
+   * One movie with its videos, credits, release dates and watch providers, texts in `locale`.
+   * Videos are limited to `locale` and English. Not cached here: MovieDetailsService caches the
+   * mapped result. Throws a 404 when TMDB has no such movie, otherwise fails like any call.
+   */
+  getMovieDetails(movieId: number, locale: Locale): Promise<TmdbMovieDetails> {
+    // The id becomes part of the path, so it must be a plain positive integer, whatever the caller
+    // validated.
+    if (!Number.isSafeInteger(movieId) || movieId < 1) {
+      throw new RangeError('movieId must be a positive integer');
+    }
+    const query = new URLSearchParams({
+      language: TMDB_LANGUAGE[locale],
+      append_to_response: DETAILS_APPENDS,
+      include_video_language: [...new Set([locale, 'en'])].join(','),
+    });
+    return this.get(`${MOVIE_PATH}/${movieId}`, query, TmdbMovieDetailsSchema, {
+      notFoundIs404: true,
+    });
+  }
+
   private async fetchDiscover(page: number, locale: Locale): Promise<TmdbDiscoverResponse> {
     const query = new URLSearchParams({
       include_adult: 'false',
@@ -123,8 +150,16 @@ export class TmdbClient {
     return new Map(body.genres.map(({ id, name }) => [id, name]));
   }
 
-  /** GET `path`, then parse the JSON body with `schema`. */
-  private async get<T>(path: string, query: URLSearchParams, schema: ZodType<T>): Promise<T> {
+  /**
+   * GET `path`, then parse the JSON body with `schema`. With `notFoundIs404`, TMDB's 404 becomes
+   * our generic 404 (the client asked for something that doesn't exist) instead of a 502.
+   */
+  private async get<T>(
+    path: string,
+    query: URLSearchParams,
+    schema: ZodType<T>,
+    { notFoundIs404 = false }: { notFoundIs404?: boolean } = {},
+  ): Promise<T> {
     const url = `${this.baseUrl}${path}?${query.toString()}`;
 
     let response: Response;
@@ -143,13 +178,16 @@ export class TmdbClient {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (error) {
-      throw this.failure(path, this.describe(error));
+      throw this.failure(path, describeFetchError(error, this.timeoutMs));
     }
 
     if (!response.ok) {
       // Error bodies may echo request details, so they are never read; this
       // only releases the connection.
       await response.body?.cancel().catch(() => undefined);
+      if (response.status === 404 && notFoundIs404) {
+        throw new NotFoundException();
+      }
       const failure = this.failure(path, `HTTP ${response.status}`);
       if (response.status === 401) {
         this.logger.error(
@@ -163,7 +201,7 @@ export class TmdbClient {
     try {
       text = await readTextUpTo(response, MAX_RESPONSE_BYTES);
     } catch (error) {
-      throw this.failure(path, this.describe(error));
+      throw this.failure(path, describeFetchError(error, this.timeoutMs));
     }
     if (text === undefined) {
       throw this.failure(path, `response too large (over ${MAX_RESPONSE_BYTES} bytes)`);
@@ -194,54 +232,4 @@ export class TmdbClient {
     this.logger.error(`TMDB GET ${path} failed: ${reason}`);
     return new BadGatewayException('TMDB request failed');
   }
-
-  /**
-   * A short, safe failure reason. Never `error.message`: Node's fetch errors
-   * can quote request headers, including the token.
-   */
-  private describe(error: unknown): string {
-    if (!(error instanceof Error)) {
-      return 'unknown error';
-    }
-    if (error.name === 'TimeoutError') {
-      return `timed out after ${this.timeoutMs} ms`;
-    }
-    // Node's fetch throws `TypeError: fetch failed` and puts the real reason
-    // (ECONNREFUSED, ENOTFOUND, …) into `cause.code`.
-    const code = (error.cause as { code?: unknown } | undefined)?.code;
-    return typeof code === 'string' ? `network error (${code})` : `network error (${error.name})`;
-  }
-}
-
-/**
- * Reads the body as UTF-8 text, but stops downloading and returns undefined as
- * soon as it exceeds `maxBytes`. `response.json()` would buffer whatever the
- * server sends, however large.
- */
-async function readTextUpTo(response: Response, maxBytes: number): Promise<string | undefined> {
-  // Cheap early exit when the server announces the size up front.
-  if (Number(response.headers.get('content-length')) > maxBytes) {
-    await response.body?.cancel().catch(() => undefined);
-    return undefined;
-  }
-  if (!response.body) {
-    return ''; // e.g. 204 No Content
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    size += value.byteLength;
-    if (size > maxBytes) {
-      await reader.cancel().catch(() => undefined);
-      return undefined;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks).toString('utf8');
 }

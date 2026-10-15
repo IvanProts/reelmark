@@ -17,6 +17,8 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       TMDB_ACCESS_TOKEN: 'e2e-fake-token-0123456789abcdef0123456789',
+      // Unreachable (discard port), so no suite can ever query the real Wikidata.
+      WIKIDATA_SPARQL_URL: 'http://127.0.0.1:9/sparql',
       DATABASE_URL: TEST_DATABASE_URL,
       JWT_SECRET: TEST_SIGNING_KEY,
     },
