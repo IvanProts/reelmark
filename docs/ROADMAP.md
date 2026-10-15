@@ -6,7 +6,7 @@ Reelmark is a learning and showcase project. Its scope ends with a polished, dem
 | ----- | ------------------------- | ------------------------------------------------------------- | ------- |
 | 0     | Foundation                | Browse a deck of popular movies in Ukrainian or English       | Done    |
 | 1     | Swipes, accounts, library | Swipe to sort movies; decisions are saved; a personal library | Done    |
-| 1.5   | Decide faster             | Trailer, critics' scores and key facts on every card          | Next    |
+| 1.5   | Decide faster             | Trailer, critics' scores and key facts on every card          | Done    |
 | 2     | Showcase polish           | A native build on a real phone and a demo anyone can watch    | Planned |
 
 ## Phase 1 — Swipes, accounts, library
@@ -21,6 +21,8 @@ Design: [design/phase-1.md](design/phase-1.md).
 - Account deletion (required by the App Store for apps with accounts).
 
 ## Phase 1.5 — Decide faster
+
+Design: [design/phase-1-5.md](design/phase-1-5.md).
 
 A poster, a rating and an overview are often not enough to decide between "want" and "not
 interested". The card gains what people actually use to decide:

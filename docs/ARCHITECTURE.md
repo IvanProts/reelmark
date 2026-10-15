@@ -98,6 +98,7 @@ gets the standard status text, so user input is never echoed back.
 | `library`   | The caller's seen / want-to-watch lists, keyset-paginated, served from the catalog.         |
 | `catalog`   | Stores movies the API has served (validated TMDB data only), so decisions can reference it. |
 | `tmdb`      | `TmdbClient` — the only code that talks to TMDB. Fixed, typed methods; no generic proxy.    |
+| `wikidata`  | Critics' scores from Wikidata's SPARQL endpoint: one fixed query, best effort, cached.      |
 | `movies`    | `/movies/deck`: orchestration (`MoviesService`) and pure TMDB → `MovieCard` mapping.        |
 | `health`    | `/health` for uptime checks (public, not rate-limited).                                     |
 
@@ -111,6 +112,7 @@ public.
 | `POST /auth/anonymous`          | Public. Creates an anonymous account; returns a token pair.    |
 | `POST /auth/refresh`            | Public. Rotates a refresh token; returns a new pair.           |
 | `GET /movies/deck`              | A page of swipe cards, without movies the user already sorted. |
+| `GET /movies/:movieId/details`  | The decision card: trailer, critics, facts, where to watch.    |
 | `GET /me` · `PATCH /me`         | Profile; `PATCH` saves the app language.                       |
 | `DELETE /me`                    | Deletes the account, its tokens and decisions.                 |
 | `PUT /me/decisions/:movieId`    | Saves seen / not seen / want (and "liked" for seen).           |
@@ -198,17 +200,25 @@ erDiagram
 
 ### Upstream calls and caching
 
-| What                | Policy                                                                     |
-| ------------------- | -------------------------------------------------------------------------- |
-| Discover pages      | Cached 10 min per `(locale, page)`, max 200 entries, successes only.       |
-| Genre lists         | Cached 24 h per locale; a failure is cached for 60 s, then retried.        |
-| Concurrent requests | Identical in-flight requests share a single upstream call.                 |
-| Timeouts / size     | `TMDB_TIMEOUT_MS` (default 5 s) per call; responses capped at 2 MB.        |
-| Redirects           | Never followed, so the token can only ever reach `TMDB_BASE_URL`.          |
-| Partial data        | Invalid movies are dropped individually; a page fails only if all are bad. |
-| Missing genres      | The deck is still served, cards just have no genre names.                  |
+| What                | Policy                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| Discover pages      | Cached 10 min per `(locale, page)`, max 200 entries, successes only.                             |
+| Genre lists         | Cached 24 h per locale; a failure is cached for 60 s, then retried.                              |
+| Concurrent requests | Identical in-flight requests share a single upstream call.                                       |
+| Timeouts / size     | `TMDB_TIMEOUT_MS` (default 5 s) per call; responses capped at 2 MB.                              |
+| Redirects           | Never followed, so the token can only ever reach `TMDB_BASE_URL`.                                |
+| Partial data        | Invalid movies are dropped individually; a page fails only if all are bad.                       |
+| Missing genres      | The deck is still served, cards just have no genre names.                                        |
+| Movie details       | One appended TMDB call per `(movie, language)`, cached 24 h; the region is applied when mapping. |
+| Critics' scores     | Wikidata, cached 7 days per movie; a failure gives empty scores and is cached for 10 min.        |
 
-The library is served from the catalog, so it makes no per-movie TMDB calls.
+The library is served from the catalog, so it makes no per-movie TMDB calls. Movie details save
+the movie to the catalog too, so a decision can follow even for a movie that never appeared in a
+deck (e.g. opened from a deep link).
+
+**Wikidata.** The SPARQL query is fixed; its only variable is the validated integer TMDB id. Scores
+are parsed from "93%" (Rotten Tomatoes) and "81/100" (Metacritic), latest statement wins, and they
+are shown as text with their source, without third-party logos.
 
 ### Rate limits
 
@@ -227,36 +237,39 @@ shared store (e.g. Redis) — not needed at the current scale.
 
 ## Mobile app (`apps/mobile`)
 
-| Area        | Approach                                                                                                                                                                                                                                                                                     |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Navigation  | Expo Router (file-based routes in `src/app/`): tabs Deck and Library, a movie detail sheet, About. Unknown deep links redirect to the deck.                                                                                                                                                  |
-| Swiping     | Reanimated + Gesture Handler: right = seen, left = not seen, up = want; buttons and screen-reader actions do the same. Saves are optimistic with retries; undo restores the card and deletes the decision.                                                                                   |
-| Server data | TanStack Query: infinite deck query per language (the server excludes sorted movies, so the deck always starts at the first undecided one); library pages by cursor.                                                                                                                         |
-| Session     | `src/lib/session.ts`: anonymous sign-in on first launch; refresh token in `expo-secure-store` (this device only, readable while unlocked); access token in memory; one shared refresh for concurrent 401s. Only a definite 401 on refresh starts a new account — a network error never does. |
-| Networking  | `src/lib/http.ts`: 10 s timeout, response validated against the shared contract, typed errors (`unreachable`, `unauthorized`, `server`, `invalid-response`, `config`); error bodies never read or logged; HTTPS required in release builds.                                                  |
-| i18n        | Typed dictionaries (`uk.ts` is the source of truth; `en.ts` must have the same keys); device language by default; the in-app choice is saved to the account (`PATCH /me`).                                                                                                                   |
-| UI          | Design tokens in `src/theme/` (colours, spacing, typography); dark, poster-first layout; WCAG AA contrast; Dynamic Type and Reduce Motion respected.                                                                                                                                         |
+| Area        | Approach                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Navigation  | Expo Router (file-based routes in `src/app/`): tabs Deck and Library, a movie detail sheet, About. Unknown deep links redirect to the deck.                                                                                                                                                                                                                                |
+| Swiping     | Reanimated + Gesture Handler: right = seen, left = not seen, up = want; buttons and screen-reader actions do the same. Saves are optimistic with retries; undo restores the card and deletes the decision.                                                                                                                                                                 |
+| Server data | TanStack Query: infinite deck query per language (the server excludes sorted movies, so the deck always starts at the first undecided one); library pages by cursor.                                                                                                                                                                                                       |
+| Session     | `src/lib/session.ts`: anonymous sign-in on first launch; refresh token in `expo-secure-store` (this device only, readable while unlocked); access token in memory; one shared refresh for concurrent 401s. Only a definite 401 on refresh starts a new account — a network error never does.                                                                               |
+| Networking  | `src/lib/http.ts`: 10 s timeout, response validated against the shared contract, typed errors (`unreachable`, `unauthorized`, `server`, `invalid-response`, `config`); error bodies never read or logged; HTTPS required in release builds.                                                                                                                                |
+| i18n        | Typed dictionaries (`uk.ts` is the source of truth; `en.ts` must have the same keys); device language by default; the in-app choice is saved to the account (`PATCH /me`).                                                                                                                                                                                                 |
+| UI          | Design tokens in `src/theme/` (colours, spacing, typography); dark, poster-first layout; WCAG AA contrast; Dynamic Type and Reduce Motion respected.                                                                                                                                                                                                                       |
+| Movie sheet | `src/app/movie/[id].tsx`: the decision card for any movie id (deck, library or deep link). Opened from the deck, its buttons sort the top card through the deck's own code (`src/lib/deck-bridge.ts`), so undo and the "liked?" prompt behave as for a swipe. The device region (`src/lib/region.ts`, validated) selects age ratings and where-to-watch.                   |
+| Trailer     | `src/app/trailer/[key].tsx`: YouTube's official embed (`youtube-nocookie.com`) in a `react-native-webview`. The app builds the page itself from a validated video id, with our app id as the Referer YouTube requires; navigation is locked to the embed, YouTube links open outside the app, and there is no JavaScript bridge into the app. Nothing overlays the player. |
 
 ## Security model
 
-| Threat                                 | Mitigation                                                                                                        |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Token extracted from the app bundle    | No secrets in the app; only `EXPO_PUBLIC_API_URL` is inlined.                                                     |
-| Token leaked via logs or URLs          | Sent only as a header; never logged; boot errors omit values.                                                     |
-| Secret committed to git                | `.gitignore` + pre-commit hook (blocks env files, runs gitleaks) + CI scan of full history.                       |
-| Our API abused as a free TMDB proxy    | Fixed endpoints only, validated parameters, authentication, per-user rate limit, caching.                         |
-| Malicious or broken upstream data      | Size cap, zod parsing, strict poster-path and URL rules, mapping to own types.                                    |
-| Information disclosure in errors       | Uniform error body; no stack traces, upstream bodies or echoed input.                                             |
-| Access to another user's data (IDOR)   | User id only from the verified token; every query is scoped to it; tests try cross-user access.                   |
-| Forged or tampered access token        | Algorithm, issuer, audience and type pinned; 64+ character secret validated at boot.                              |
-| Stolen refresh token                   | Kept in the OS keychain; rotated on every use; reuse revokes the family; stored server-side as a hash only.       |
-| Database leak                          | No usable tokens in it (hashes only); no personal data in anonymous accounts.                                     |
-| Responses cached by proxies            | `Cache-Control: no-store` on every response.                                                                      |
-| Oversized or unexpected request bodies | JSON only (other types get 415), 16 KB cap (413); form and multipart parsers never run.                           |
-| Account farming                        | Anonymous sign-up limited to 10 per hour per IP.                                                                  |
-| Database exposed on the network        | Local PostgreSQL bound to 127.0.0.1; generated password; all queries parameterised by Prisma.                     |
-| Compromised npm package                | pnpm blocks install scripts, delays new releases by 24 h, fails on provenance downgrades; lockfile + audit in CI. |
-| Secrets read by AI coding tools        | Deny rules and a pre-tool hook block reading `.env` files (`.claude/`).                                           |
+| Threat                                 | Mitigation                                                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Token extracted from the app bundle    | No secrets in the app; only `EXPO_PUBLIC_API_URL` is inlined.                                                                   |
+| Token leaked via logs or URLs          | Sent only as a header; never logged; boot errors omit values.                                                                   |
+| Secret committed to git                | `.gitignore` + pre-commit hook (blocks env files, runs gitleaks) + CI scan of full history.                                     |
+| Our API abused as a free TMDB proxy    | Fixed endpoints only, validated parameters, authentication, per-user rate limit, caching.                                       |
+| Malicious or broken upstream data      | Size cap, zod parsing, strict poster-path and URL rules, mapping to own types.                                                  |
+| Information disclosure in errors       | Uniform error body; no stack traces, upstream bodies or echoed input.                                                           |
+| Access to another user's data (IDOR)   | User id only from the verified token; every query is scoped to it; tests try cross-user access.                                 |
+| Forged or tampered access token        | Algorithm, issuer, audience and type pinned; 64+ character secret validated at boot.                                            |
+| Stolen refresh token                   | Kept in the OS keychain; rotated on every use; reuse revokes the family; stored server-side as a hash only.                     |
+| Embedded web content (trailers)        | A page the app builds from a validated id; navigation locked to the YouTube embed; CSP; no JavaScript bridge, no injected code. |
+| Database leak                          | No usable tokens in it (hashes only); no personal data in anonymous accounts.                                                   |
+| Responses cached by proxies            | `Cache-Control: no-store` on every response.                                                                                    |
+| Oversized or unexpected request bodies | JSON only (other types get 415), 16 KB cap (413); form and multipart parsers never run.                                         |
+| Account farming                        | Anonymous sign-up limited to 10 per hour per IP.                                                                                |
+| Database exposed on the network        | Local PostgreSQL bound to 127.0.0.1; generated password; all queries parameterised by Prisma.                                   |
+| Compromised npm package                | pnpm blocks install scripts, delays new releases by 24 h, fails on provenance downgrades; lockfile + audit in CI.               |
+| Secrets read by AI coding tools        | Deny rules and a pre-tool hook block reading `.env` files (`.claude/`).                                                         |
 
 ## Testing strategy
 

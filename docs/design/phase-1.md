@@ -1,6 +1,6 @@
 # Phase 1 design — swipes, accounts, library
 
-Status: **proposed**. Roadmap: [../ROADMAP.md](../ROADMAP.md).
+Status: **implemented**. Roadmap: [../ROADMAP.md](../ROADMAP.md).
 
 ## Goals
 

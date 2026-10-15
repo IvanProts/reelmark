@@ -49,9 +49,12 @@ Known follow-ups, deliberately deferred. Code that depends on an item references
 
 ## Polish
 
-- TMDB logo on the About screen (TMDB attribution guidelines).
-- Movie detail outside the library (from the deck or a deep link): needs a per-movie endpoint; the
-  sheet currently uses library data already on screen.
+- **"Liked it?" prompt and failure toast are not drawn** on the current iOS simulator, although
+  they are laid out and announced (`src/components/deck-toast.tsx`, Reanimated `entering`). They
+  rendered on 2026-10-09; the Phase 1 code alone shows the same behaviour now, so suspect the
+  simulator/runtime. Check on a device first.
+- **Android check** of the trailer player (fullscreen video), the movie sheet and the deck.
+- **TMDB logo** on the About screen: TMDB's terms require the logo, not only the text notice.
 - Android dev/release builds need HTTPS or a cleartext exception for a local API.
 - Drop `vite-tsconfig-paths` from the API test setup (Vite 8 resolves tsconfig paths natively).
 - Evaluate Nest 12's built-in `app.useSecurityHeaders()` as a replacement for `helmet`.

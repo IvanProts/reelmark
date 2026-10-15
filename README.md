@@ -31,7 +31,7 @@ builds your personal library.
   <img src="docs/screenshots/swipe-uk.png" width="200" alt="Swiping a movie up to the watchlist">
   <img src="docs/screenshots/liked-uk.png" width="200" alt="The &quot;Liked it?&quot; prompt after a seen movie">
   <img src="docs/screenshots/library-uk.png" width="200" alt="Library of seen movies">
-  <img src="docs/screenshots/detail-uk.png" width="200" alt="Movie detail sheet with the saved decision">
+  <img src="docs/screenshots/detail-uk.png" width="200" alt="Decision card: trailer, critics' scores and where to watch">
 </p>
 
 ## Features
@@ -39,6 +39,8 @@ builds your personal library.
 - **Swipe to sort**: right = seen, left = not seen, up = want to watch, with a quick "liked it?"
   for seen movies and one-tap undo; buttons and screen-reader actions do the same
 - **Personal library** of seen and want-to-watch movies; change or remove a decision anytime
+- **Decide faster**: a movie card with the trailer (played in the app), Rotten Tomatoes and
+  Metacritic scores, runtime, age rating, cast and where to watch in your country
 - **No sign-up wall**: an anonymous account is created on first launch; decisions sync to the
   server and sorted movies never come back to the deck
 - **Card deck** of popular movies with poster, year, rating, genres and overview
@@ -49,9 +51,8 @@ builds your personal library.
 - **Accessible**: WCAG AA contrast, screen-reader labels, Dynamic Type, Reduce Motion
 - **Secure by design**: the app holds no secrets — see [Security](#security)
 
-**Status:** early development. Swiping, accounts and the library (Phase 1) are complete;
-a decision card with trailers and critics' scores (Phase 1.5) is next — see the
-[roadmap](docs/ROADMAP.md).
+**Status:** swiping, accounts, the library and the decision card (Phases 1 and 1.5) are complete
+— see the [roadmap](docs/ROADMAP.md).
 
 ## Tech stack
 
