@@ -1,254 +1,246 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { type DecisionStatus, MovieIdParamsSchema } from '@reelmark/shared';
+import { MovieIdParamsSchema, type DecisionStatus, type MovieDetails } from '@reelmark/shared';
 
+import { ActionButton } from '@/components/action-button';
 import { AppText } from '@/components/app-text';
-import { DangerButton } from '@/components/danger-button';
-import { Icon, type IconName } from '@/components/icon';
+import { DeckActions } from '@/components/deck-actions';
 import { IconButton } from '@/components/icon-button';
-import { SegmentedControl } from '@/components/segmented-control';
-import { useDeleteDecision, useSaveDecision } from '@/hooks/use-decisions';
+import { LibraryDecision } from '@/components/library-decision';
+import { MovieDetailsHeader, MovieStory, ScoresRow } from '@/components/movie-details';
+import { StatusCard } from '@/components/status-card';
+import { WatchOptions } from '@/components/watch-options';
 import { useCachedLibraryItem } from '@/hooks/use-library';
+import { useMovieDetails } from '@/hooks/use-movie-details';
 import { useI18n } from '@/i18n';
-import { formatRating, hasRating } from '@/lib/format';
+import { getDeckDecider } from '@/lib/deck-bridge';
+import { describeError } from '@/lib/error-messages';
+import { ApiError } from '@/lib/http';
 import { colors, radii, sizes, spacing } from '@/theme';
 
-type Decision = { status: DecisionStatus; liked: boolean | null };
+/**
+ * The sheet fits its content, so a fixed height keeps it from jumping between the loading,
+ * error and loaded states; the content scrolls inside.
+ */
+const SHEET_HEIGHT = 0.9;
 
-/** Movie details from the library, where the decision can be changed or removed. A sheet. */
-export default function MovieDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+/**
+ * The movie sheet: everything needed to decide (trailer, scores, story, where to watch) and the
+ * decision itself. Opened from the deck (`?from=deck`), the library, or a deep link to any id.
+ */
+export default function MovieSheet() {
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   // Route params can come from a deep link, so they are validated like any other input.
   const movieId = MovieIdParamsSchema.safeParse({ movieId: id }).data?.movieId;
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { t, locale } = useI18n();
-  const cached = useCachedLibraryItem(movieId);
-  // A snapshot: after an edit, the movie may leave the cached list it was opened from.
-  const [item] = useState(cached);
-  const [decision, setDecision] = useState<Decision | undefined>(
-    cached && { status: cached.decision.status, liked: cached.decision.liked },
+  const { height } = useWindowDimensions();
+  const { t } = useI18n();
+  const details = useMovieDetails(movieId);
+  // Settled once: the deck's top card can't change while its sheet covers the deck.
+  const [fromDeck] = useState(
+    () => from === 'deck' && movieId !== undefined && getDeckDecider(movieId) !== undefined,
   );
-  const [failed, setFailed] = useState(false);
-  const saveDecision = useSaveDecision();
-  const deleteDecision = useDeleteDecision();
 
-  const sheetPadding = { paddingBottom: Math.max(insets.bottom, spacing.xl) };
+  const close = (
+    <IconButton icon="close" accessibilityLabel={t('common.close')} onPress={router.back} />
+  );
+  const notFound = movieId === undefined || isNotFound(details.error);
 
-  if (!item || !decision) {
-    return (
-      <View style={[styles.sheet, sheetPadding]}>
-        <View style={styles.closeRow}>
-          <IconButton icon="close" accessibilityLabel={t('common.close')} onPress={router.back} />
-        </View>
-        <AppText color="textSecondary">{t('detail.notFound')}</AppText>
-      </View>
+  let content;
+  if (notFound) {
+    content = (
+      <>
+        <View style={styles.closeRow}>{close}</View>
+        <StatusCard
+          plain
+          icon="empty"
+          title={t('detail.notFoundTitle')}
+          message={t('detail.notFoundMessage')}
+        />
+      </>
+    );
+  } else if (details.isPending) {
+    content = (
+      <>
+        <View style={styles.closeRow}>{close}</View>
+        <DetailsSkeleton />
+      </>
+    );
+  } else if (details.isError) {
+    const copy = describeError(details.error);
+    content = (
+      <>
+        <View style={styles.closeRow}>{close}</View>
+        <StatusCard
+          plain
+          icon={copy.icon}
+          title={t(copy.title)}
+          message={t(copy.message)}
+          action={{
+            label: t('deck.retry'),
+            icon: 'retry',
+            onPress: () => void details.refetch(),
+          }}
+        />
+      </>
+    );
+  } else {
+    content = (
+      <Loaded
+        details={details.data}
+        close={close}
+        fromDeck={fromDeck}
+        onDone={() => router.back()}
+        onPlay={(key) => router.push({ pathname: '/trailer/[key]', params: { key } })}
+      />
     );
   }
-
-  const { movie } = item;
-
-  // Optimistic: the sheet shows the change at once and reverts if saving fails.
-  function change(next: Decision) {
-    const previous = decision;
-    setDecision(next);
-    setFailed(false);
-    saveDecision.mutate(
-      { movieId: movie.id, ...next },
-      {
-        onError: () => {
-          setDecision(previous);
-          setFailed(true);
-        },
-      },
-    );
-  }
-
-  function remove() {
-    setFailed(false);
-    deleteDecision.mutate(movie.id, {
-      onSuccess: () => router.back(),
-      onError: () => setFailed(true),
-    });
-  }
-
-  const meta = [
-    movie.year,
-    hasRating(movie.rating) ? `★ ${formatRating(movie.rating, locale)}` : null,
-  ]
-    .filter(Boolean)
-    .join('  ·  ');
-  const statusOptions = [
-    { value: 'seen' as const, label: t('deck.seen') },
-    { value: 'not_seen' as const, label: t('deck.notSeen') },
-    { value: 'want' as const, label: t('deck.want') },
-  ];
 
   return (
-    <View style={[styles.sheet, sheetPadding]}>
-      <View style={styles.header}>
-        <Image
-          source={movie.posterUrl}
-          style={styles.poster}
-          contentFit="cover"
-          accessibilityIgnoresInvertColors
+    <ScrollView
+      style={{ height: height * SHEET_HEIGHT }}
+      contentContainerStyle={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}
+    >
+      {content}
+    </ScrollView>
+  );
+}
+
+type LoadedProps = {
+  details: MovieDetails;
+  close: ReactNode;
+  fromDeck: boolean;
+  /** Closes the sheet. */
+  onDone: () => void;
+  onPlay: (youtubeKey: string) => void;
+};
+
+function Loaded({ details, close, fromDeck, onDone, onPlay }: LoadedProps) {
+  const { t } = useI18n();
+  const movieId = details.movie.id;
+  const cached = useCachedLibraryItem(movieId);
+  // A snapshot: after an edit, the movie may leave the cached list it was opened from.
+  const [initial] = useState(
+    () => cached && { status: cached.decision.status, liked: cached.decision.liked },
+  );
+  const { trailer } = details;
+
+  function decideInDeck(status: DecisionStatus) {
+    getDeckDecider(movieId)?.(status);
+    onDone();
+  }
+
+  return (
+    <>
+      <MovieDetailsHeader details={details} action={close} />
+      {trailer ? (
+        <ActionButton
+          label={t('detail.trailer')}
+          icon="play"
+          accessibilityHint={t('detail.trailerHint')}
+          onPress={() => onPlay(trailer.youtubeKey)}
         />
-        <View style={styles.headerText}>
-          <AppText variant="headline" accessibilityRole="header">
-            {movie.title}
-          </AppText>
-          {meta ? (
-            <AppText variant="caption" color="textSecondary">
-              {meta}
-            </AppText>
-          ) : null}
-          {movie.genres.length > 0 ? (
-            <AppText variant="caption" color="textTertiary">
-              {movie.genres.join(', ')}
-            </AppText>
-          ) : null}
-        </View>
-        <IconButton icon="close" accessibilityLabel={t('common.close')} onPress={router.back} />
-      </View>
-
-      <AppText variant="callout" color="textSecondary" numberOfLines={7}>
-        {movie.overview.trim() || t('card.noOverview')}
-      </AppText>
-
-      <View style={styles.section}>
-        <AppText variant="label">{t('detail.decision')}</AppText>
-        <SegmentedControl
-          options={statusOptions}
-          selected={decision.status}
-          onChange={(status) =>
-            change({ status, liked: status === 'seen' ? decision.liked : null })
-          }
-          accessibilityLabel={t('detail.decision')}
-        />
-        {decision.status === 'seen' ? (
-          <View style={styles.likedRow}>
-            <AppText variant="body" color="textSecondary" style={styles.likedLabel}>
-              {t('deck.likedQuestion')}
-            </AppText>
-            <LikedToggle
-              icon="thumbUp"
-              label={t('deck.liked')}
-              checked={decision.liked === true}
-              onPress={() =>
-                change({ status: 'seen', liked: decision.liked === true ? null : true })
-              }
-            />
-            <LikedToggle
-              icon="thumbDown"
-              label={t('deck.disliked')}
-              checked={decision.liked === false}
-              onPress={() =>
-                change({ status: 'seen', liked: decision.liked === false ? null : false })
-              }
-            />
-          </View>
-        ) : null}
-      </View>
-
-      {failed ? (
-        <AppText variant="caption" color="danger" accessibilityLiveRegion="polite">
-          {t('detail.saveFailed')}
-        </AppText>
       ) : null}
+      <ScoresRow details={details} />
+      <MovieStory details={details} />
+      <View style={styles.divider} />
+      <WatchOptions watch={details.watch} />
+      <View style={styles.divider} />
+      {fromDeck ? (
+        <View style={styles.deckDecision}>
+          <AppText variant="label">{t('detail.decision')}</AppText>
+          <DeckActions enabled onDecide={decideInDeck} />
+        </View>
+      ) : (
+        <LibraryDecision movieId={movieId} initial={initial} onRemoved={onDone} />
+      )}
+    </>
+  );
+}
 
-      <DangerButton
-        label={t('detail.remove')}
-        hint={t('detail.removeHint')}
-        onPress={remove}
-        disabled={deleteDecision.isPending}
-      />
+/** Placeholder blocks in the shape of the loaded sheet. */
+function DetailsSkeleton() {
+  const { t } = useI18n();
+  return (
+    <View
+      style={styles.skeleton}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={t('detail.loading')}
+    >
+      <View style={styles.skeletonHeader}>
+        <View style={[styles.block, styles.skeletonPoster]} />
+        <View style={styles.skeletonLines}>
+          <View style={[styles.block, styles.lineWide]} />
+          <View style={[styles.block, styles.lineShort]} />
+        </View>
+      </View>
+      <View style={[styles.block, styles.skeletonButton]} />
+      {[0, 1, 2, 3].map((line) => (
+        <View key={line} style={[styles.block, styles.lineFull]} />
+      ))}
     </View>
   );
 }
 
-/** 👍 or 👎; tapping the selected one again clears the rating. */
-function LikedToggle({
-  icon,
-  label,
-  checked,
-  onPress,
-}: {
-  icon: IconName;
-  label: string;
-  checked: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="togglebutton"
-      accessibilityLabel={label}
-      accessibilityState={{ checked }}
-      style={({ pressed }) => [
-        styles.toggle,
-        checked && styles.toggleChecked,
-        pressed && styles.pressed,
-      ]}
-    >
-      <Icon name={icon} color={checked ? 'onAccent' : 'textSecondary'} />
-    </Pressable>
-  );
+function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
 }
 
 const styles = StyleSheet.create({
   sheet: {
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xxl,
-    gap: spacing.lg,
+    gap: spacing.xl,
   },
   closeRow: {
     alignItems: 'flex-end',
   },
-  header: {
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  deckDecision: {
+    gap: spacing.md,
+  },
+  skeleton: {
+    gap: spacing.lg,
+  },
+  skeletonHeader: {
     flexDirection: 'row',
     gap: spacing.lg,
-    alignItems: 'flex-start',
   },
-  poster: {
+  skeletonPoster: {
     width: sizes.detailPoster,
     aspectRatio: sizes.cardAspectRatio,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceRaised,
   },
-  headerText: {
+  skeletonLines: {
     flex: 1,
-    gap: spacing.xs,
-  },
-  section: {
     gap: spacing.sm,
   },
-  likedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  likedLabel: {
-    flex: 1,
-  },
-  toggle: {
-    width: sizes.minTouchTarget,
-    height: sizes.minTouchTarget,
+  skeletonButton: {
+    height: sizes.actionButton,
     borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  block: {
+    borderRadius: radii.sm,
     backgroundColor: colors.surfaceRaised,
   },
-  toggleChecked: {
-    backgroundColor: colors.accent,
+  lineWide: {
+    height: spacing.xxl,
+    width: '80%',
   },
-  pressed: {
-    opacity: 0.7,
+  lineShort: {
+    height: spacing.lg,
+    width: '50%',
+  },
+  lineFull: {
+    height: spacing.lg,
   },
 });

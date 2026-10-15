@@ -17,6 +17,9 @@ import { colors, navigationTheme, radii } from '@/theme';
 /** Longest the splash screen waits for the profile before showing the app anyway. */
 const MAX_SPLASH_MS = 3000;
 
+/** A deep link to a sheet (e.g. /movie/603) opens it over the tabs, so closing it lands there. */
+export const unstable_settings = { initialRouteName: '(tabs)' };
+
 // Keep the splash screen up until the profile (and so the saved language) is known.
 void SplashScreen.preventAutoHideAsync();
 
@@ -26,6 +29,11 @@ const sheetOptions = {
   sheetGrabberVisible: true,
   sheetCornerRadius: radii.sheet,
   contentStyle: { backgroundColor: colors.surface },
+} as const;
+
+const playerOptions = {
+  presentation: 'fullScreenModal',
+  contentStyle: { backgroundColor: colors.background },
 } as const;
 
 /** Root layout: app-wide providers and the stack navigator. */
@@ -48,6 +56,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="about" options={sheetOptions} />
               <Stack.Screen name="movie/[id]" options={sheetOptions} />
+              <Stack.Screen name="trailer/[key]" options={playerOptions} />
             </Stack>
           </ThemeProvider>
         </ProfileProvider>

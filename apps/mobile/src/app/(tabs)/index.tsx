@@ -19,6 +19,7 @@ import { useDeck, type DeckFailure } from '@/hooks/use-deck';
 import { useMe } from '@/hooks/use-profile';
 import { useScreenReaderEnabled } from '@/hooks/use-screen-reader';
 import { useI18n, type TranslateFn } from '@/i18n';
+import { registerDeckTopCard } from '@/lib/deck-bridge';
 import { describeError } from '@/lib/error-messages';
 import { sizes, spacing } from '@/theme';
 
@@ -66,6 +67,20 @@ function Deck() {
     setRestored({ movieId: entry.movie.id, from: entry.status });
   }
 
+  function openDetails(movie: MovieCard) {
+    router.push({ pathname: '/movie/[id]', params: { id: String(movie.id), from: 'deck' } });
+  }
+
+  // The movie sheet's Seen / Not seen / Want buttons act like the buttons below the deck.
+  const topCardId = deck.status === 'ready' ? deck.current?.id : undefined;
+  useEffect(() => {
+    if (topCardId === undefined) return;
+    return registerDeckTopCard({
+      movieId: topCardId,
+      decide: (status) => topCardRef.current?.decide(status),
+    });
+  }, [topCardId]);
+
   function answerLiked(liked: boolean) {
     if (likedPrompt) deck.rate(likedPrompt, liked);
     setLikedPrompt(null);
@@ -104,6 +119,7 @@ function Deck() {
               topCardRef={topCardRef}
               restored={restored}
               onDecide={decide}
+              onOpenDetails={openDetails}
             />
           </View>
         ) : null}
@@ -138,10 +154,11 @@ type DeckContentProps = {
   topCardRef: RefObject<SwipeCardHandle | null>;
   restored?: { movieId: number; from: DecisionStatus };
   onDecide: (movie: MovieCard, status: DecisionStatus) => void;
+  onOpenDetails: (movie: MovieCard) => void;
 };
 
 /** What fills the card slot for each deck status. */
-function DeckContent({ deck, topCardRef, restored, onDecide }: DeckContentProps) {
+function DeckContent({ deck, topCardRef, restored, onDecide, onOpenDetails }: DeckContentProps) {
   const { t } = useI18n();
 
   switch (deck.status) {
@@ -155,6 +172,7 @@ function DeckContent({ deck, topCardRef, restored, onDecide }: DeckContentProps)
           topCardRef={topCardRef}
           restored={restored}
           onDecide={onDecide}
+          onOpenDetails={onOpenDetails}
         />
       ) : null;
     case 'error': {

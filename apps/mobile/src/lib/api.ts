@@ -5,6 +5,8 @@ import {
   LibraryPageSchema,
   LibraryQuerySchema,
   MeSchema,
+  MovieDetailsQuerySchema,
+  MovieDetailsSchema,
   MovieIdParamsSchema,
   SaveDecisionSchema,
   UpdateMeSchema,
@@ -13,6 +15,8 @@ import {
   type LibraryStatus,
   type Locale,
   type Me,
+  type MovieDetails,
+  type Region,
   type SaveDecision,
 } from '@reelmark/shared';
 
@@ -25,6 +29,21 @@ export function fetchDeck(page: number, lang: Locale, signal?: AbortSignal): Pro
     schema: DeckResponseSchema,
     signal,
   });
+}
+
+/** Everything the movie sheet shows, localised to `lang`, with ratings and offers for `region`. */
+export function fetchMovieDetails(
+  movieId: number,
+  lang: Locale,
+  region: Region,
+  signal?: AbortSignal,
+): Promise<MovieDetails> {
+  const params = MovieIdParamsSchema.parse({ movieId });
+  const query = MovieDetailsQuerySchema.parse({ lang, region });
+  return authorizedRequest(
+    `/movies/${params.movieId}/details?lang=${query.lang}&region=${query.region}`,
+    { schema: MovieDetailsSchema, signal },
+  );
 }
 
 /** Saves (or replaces) the user's decision about a movie. */

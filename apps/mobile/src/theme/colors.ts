@@ -52,8 +52,6 @@ export const colors = {
   stackVeil: 'rgba(42, 42, 53, 0.82)',
   /** Behind swipe stamps, so their text reads on any poster. */
   stampBackdrop: 'rgba(11, 11, 15, 0.45)',
-  /** Darkens the whole poster while the overview is open. */
-  posterDim: 'rgba(11, 11, 15, 0.82)',
 } as const;
 
 /**

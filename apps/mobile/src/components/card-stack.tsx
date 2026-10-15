@@ -19,6 +19,7 @@ type CardStackProps = {
   /** A card brought back by undo, and the side it flies back in from. */
   restored?: { movieId: number; from: DecisionStatus };
   onDecide: (movie: Movie, status: DecisionStatus) => void;
+  onOpenDetails: (movie: Movie) => void;
 };
 
 /**
@@ -27,7 +28,14 @@ type CardStackProps = {
  * When the top card leaves, the card behind grows into its place: React keeps that component
  * (same `key`), so a CSS transition animates its transform.
  */
-export function CardStack({ current, next, topCardRef, restored, onDecide }: CardStackProps) {
+export function CardStack({
+  current,
+  next,
+  topCardRef,
+  restored,
+  onDecide,
+  onOpenDetails,
+}: CardStackProps) {
   // Render back-to-front: later children are drawn on top.
   const layers = next ? [next, current] : [current];
 
@@ -49,6 +57,7 @@ export function CardStack({ current, next, topCardRef, restored, onDecide }: Car
               interactive={isTop}
               enterFrom={restored?.movieId === movie.id ? restored.from : undefined}
               onDecide={(status) => onDecide(movie, status)}
+              onOpenDetails={() => onOpenDetails(movie)}
             />
             {/* Fades out as the card behind moves to the front. */}
             <Animated.View

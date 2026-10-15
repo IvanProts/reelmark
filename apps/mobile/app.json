@@ -10,12 +10,14 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0B0B0F",
     "ios": {
+      "bundleIdentifier": "com.ivanprots.reelmark",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "CFBundleLocalizations": ["en", "uk"]
       }
     },
     "android": {
+      "package": "com.ivanprots.reelmark",
       "adaptiveIcon": {
         "backgroundColor": "#0B0B0F",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

@@ -3,8 +3,6 @@ import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import Animated, { css, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
-
 import type { MovieCard as Movie } from '@reelmark/shared';
 
 import { useI18n } from '@/i18n';
@@ -15,30 +13,16 @@ import { AppText } from './app-text';
 import { Icon } from './icon';
 
 const MAX_GENRES = 3;
-const ANIMATION_MS = 250;
-
-type MovieCardProps = Movie & {
-  /** Shows the overview over a dimmed poster. */
-  expanded?: boolean;
-};
+const POSTER_FADE_MS = 250;
 
 /**
- * One movie: full-bleed poster with title, year, rating and genres on a bottom gradient.
- * Purely visual; the swipeable wrapper handles touches and screen readers. The card fills
- * its parent, which decides the size.
+ * One movie: full-bleed poster with title, year, rating and genres on a bottom gradient, and a
+ * "Details" chip. Purely visual; the swipeable wrapper handles touches (a tap opens the movie
+ * sheet) and screen readers. The card fills its parent, which decides the size.
  */
-export function MovieCard({
-  title,
-  year,
-  rating,
-  genres,
-  overview,
-  posterUrl,
-  expanded = false,
-}: MovieCardProps) {
+export function MovieCard({ title, year, rating, genres, posterUrl }: Movie) {
   const { t } = useI18n();
   const shownGenres = genres.slice(0, MAX_GENRES);
-  const overviewText = overview.trim() || t('card.noOverview');
 
   return (
     <View style={styles.card}>
@@ -47,7 +31,7 @@ export function MovieCard({
         style={StyleSheet.absoluteFill}
         contentFit="cover"
         // Fade the poster in once it's downloaded instead of popping in.
-        transition={ANIMATION_MS}
+        transition={POSTER_FADE_MS}
         // iOS "Smart Invert" must not turn posters into negatives.
         accessibilityIgnoresInvertColors
       />
@@ -60,23 +44,19 @@ export function MovieCard({
         pointerEvents="none"
       />
 
-      {/* Dims the poster while the overview is open; a CSS transition animates `opacity`. */}
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.dim, transitions.opacity, { opacity: expanded ? 1 : 0 }]}
-      />
-
       <View style={styles.content}>
-        {/* `layout` animates this block upwards when the overview appears below it. */}
-        <Animated.View layout={LinearTransition.duration(ANIMATION_MS)} style={styles.headline}>
-          <AppText variant="hero" numberOfLines={expanded ? 3 : 2}>
+        <View style={styles.headline}>
+          <AppText variant="hero" numberOfLines={2}>
             {title}
           </AppText>
 
           <View style={styles.metaRow}>
             <Meta year={year} rating={rating} />
-            <View style={styles.expandHint}>
-              <Icon name={expanded ? 'collapse' : 'expand'} size={sizes.iconSmall} />
+            <View style={styles.detailsChip}>
+              <Icon name="info" size={sizes.iconSmall} />
+              <AppText variant="micro" numberOfLines={1}>
+                {t('card.details')}
+              </AppText>
             </View>
           </View>
 
@@ -91,20 +71,7 @@ export function MovieCard({
               ))}
             </View>
           ) : null}
-        </Animated.View>
-
-        {expanded ? (
-          <Animated.ScrollView
-            entering={FadeIn.duration(ANIMATION_MS)}
-            exiting={FadeOut.duration(ANIMATION_MS / 2)}
-            style={styles.overview}
-            showsVerticalScrollIndicator={false}
-          >
-            <AppText variant="callout" color="textSecondary">
-              {overviewText}
-            </AppText>
-          </Animated.ScrollView>
-        ) : null}
+        </View>
       </View>
     </View>
   );
@@ -145,14 +112,6 @@ function Meta({ year, rating }: Pick<Movie, 'year' | 'rating'>) {
   );
 }
 
-// Like StyleSheet.create, but also accepts Reanimated's CSS transition properties.
-const transitions = css.create({
-  opacity: {
-    transitionProperty: 'opacity',
-    transitionDuration: ANIMATION_MS,
-  },
-});
-
 const styles = StyleSheet.create({
   card: {
     flex: 1,
@@ -171,10 +130,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: '65%',
   },
-  dim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: colors.posterDim,
-  },
   content: {
     ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
@@ -192,13 +147,16 @@ const styles = StyleSheet.create({
   metaSpacer: {
     flex: 1,
   },
-  expandHint: {
-    width: sizes.badge,
-    height: sizes.badge,
-    borderRadius: radii.full,
+  detailsChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: sizes.badge,
+    paddingHorizontal: spacing.sm + spacing.xxs,
+    borderRadius: radii.full,
     backgroundColor: colors.overlayChip,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.overlayChipBorder,
   },
   genres: {
     flexDirection: 'row',
@@ -213,11 +171,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.overlayChip,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.overlayChipBorder,
-  },
-  overview: {
-    // Takes the remaining height and scrolls when the text is longer.
-    flexGrow: 0,
-    flexShrink: 1,
-    marginTop: spacing.lg,
   },
 });

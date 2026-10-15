@@ -23,8 +23,7 @@ const ICONS = {
   libraryTab: { ios: 'books.vertical.fill', android: 'video_library' },
   trash: { ios: 'trash', android: 'delete' },
   retry: { ios: 'arrow.clockwise', android: 'refresh' },
-  expand: { ios: 'chevron.up', android: 'expand_less' },
-  collapse: { ios: 'chevron.down', android: 'expand_more' },
+  play: { ios: 'play.fill', android: 'play_arrow' },
   close: { ios: 'xmark', android: 'close' },
   external: { ios: 'arrow.up.right', android: 'open_in_new' },
 } as const satisfies Record<string, SymbolName>;

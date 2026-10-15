@@ -11,25 +11,28 @@ import { Icon, type IconName } from './icon';
 type DeckActionsProps = {
   /** False while there is no card to decide on. */
   enabled: boolean;
-  canUndo: boolean;
   onDecide: (status: DecisionStatus) => void;
-  onUndo: () => void;
+  /** Without it there is no undo button (the movie sheet shows only the decisions). */
+  onUndo?: () => void;
+  canUndo?: boolean;
 };
 
 /** Buttons under the deck: undo, plus the same three decisions as the swipe gestures. */
-export function DeckActions({ enabled, canUndo, onDecide, onUndo }: DeckActionsProps) {
+export function DeckActions({ enabled, onDecide, onUndo, canUndo = false }: DeckActionsProps) {
   const { t } = useI18n();
 
   return (
     <View style={styles.row}>
-      <RoundButton
-        icon="undo"
-        label={t('deck.undo')}
-        hint={t('deck.undoHint')}
-        small
-        disabled={!canUndo}
-        onPress={onUndo}
-      />
+      {onUndo ? (
+        <RoundButton
+          icon="undo"
+          label={t('deck.undo')}
+          hint={t('deck.undoHint')}
+          small
+          disabled={!canUndo}
+          onPress={onUndo}
+        />
+      ) : null}
       <RoundButton
         icon="notSeen"
         label={t('deck.notSeen')}

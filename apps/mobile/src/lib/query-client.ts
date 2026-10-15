@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import type { LibraryStatus, Locale } from '@reelmark/shared';
+import type { LibraryStatus, Locale, Region } from '@reelmark/shared';
 
 import { ApiError } from './http';
 
@@ -25,11 +25,16 @@ export const queryClient = new QueryClient({
   },
 });
 
-/** Query keys in one place, so invalidation can't miss a spelling. Data is per user. */
+/**
+ * Query keys in one place, so invalidation can't miss a spelling. User data is keyed per user;
+ * movie details are the same for everyone.
+ */
 export const queryKeys = {
   me: ['me'] as const,
   deck: (userId: string | undefined, locale: Locale) => ['deck', userId, locale] as const,
   libraryAll: ['library'] as const,
   library: (userId: string | undefined, status: LibraryStatus, locale: Locale) =>
     ['library', userId, status, locale] as const,
+  movieDetails: (movieId: number | undefined, locale: Locale, region: Region) =>
+    ['movie-details', movieId, locale, region] as const,
 };

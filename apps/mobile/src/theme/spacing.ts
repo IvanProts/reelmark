@@ -45,6 +45,8 @@ export const sizes = {
   statusIconCircle: 64,
   /** Poster width in the movie detail sheet. */
   detailPoster: 96,
+  /** Square streaming-service logos in the movie sheet. */
+  providerLogo: 44,
   /** Posters are 2:3 (width:height), so cards are too. */
   cardAspectRatio: 2 / 3,
   /** How far the next card peeks out from under the top one. */

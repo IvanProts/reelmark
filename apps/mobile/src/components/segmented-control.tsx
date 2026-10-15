@@ -13,7 +13,8 @@ type Option<Value extends string> = {
 
 type SegmentedControlProps<Value extends string> = {
   options: readonly Option<Value>[];
-  selected: Value;
+  /** Undefined when nothing has been chosen yet. */
+  selected: Value | undefined;
   onChange: (value: Value) => void;
   /** What the whole control is for, read by screen readers ("Language"). */
   accessibilityLabel: string;

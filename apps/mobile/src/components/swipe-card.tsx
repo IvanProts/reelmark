@@ -1,8 +1,8 @@
 /**
  * A movie card you can swipe: right = seen, left = not seen, up = want to watch.
- * Drag, flick, tap for the overview, or use screen-reader actions; all paths end in `onDecide`.
+ * Drag, flick or use screen-reader actions; all paths end in `onDecide`. A tap opens the details.
  */
-import { useEffect, useImperativeHandle, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, type Ref } from 'react';
 import {
   StyleSheet,
   useWindowDimensions,
@@ -55,17 +55,25 @@ type SwipeCardProps = {
   /** For a card restored by undo: the side it flies back in from. */
   enterFrom?: DecisionStatus;
   onDecide: (status: DecisionStatus) => void;
+  /** Opens the movie sheet. */
+  onOpenDetails: () => void;
   ref?: Ref<SwipeCardHandle>;
 };
 
 type Limits = { side: number; up: number };
 
-export function SwipeCard({ movie, interactive, enterFrom, onDecide, ref }: SwipeCardProps) {
+export function SwipeCard({
+  movie,
+  interactive,
+  enterFrom,
+  onDecide,
+  onOpenDetails,
+  ref,
+}: SwipeCardProps) {
   const { t } = useI18n();
   const description = useMovieDescription(movie);
   const { width, height } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
-  const [expanded, setExpanded] = useState(false);
 
   const limits: Limits = { side: width * SIDE_THRESHOLD, up: height * UP_THRESHOLD };
   const start =
@@ -140,11 +148,10 @@ export function SwipeCard({ movie, interactive, enterFrom, onDecide, ref }: Swip
         translateY.set(withSpring(0));
       }
     });
-  const toggleExpanded = () => setExpanded((value) => !value);
   const tap = Gesture.Tap()
     .enabled(interactive)
     .onEnd((_event, success) => {
-      if (success) scheduleOnRN(toggleExpanded);
+      if (success && !leaving.get()) scheduleOnRN(onOpenDetails);
     });
   // The tap only counts if the finger didn't start a drag.
   const gesture = Gesture.Exclusive(pan, tap);
@@ -165,13 +172,12 @@ export function SwipeCard({ movie, interactive, enterFrom, onDecide, ref }: Swip
 
   function onAccessibilityAction(event: AccessibilityActionEvent) {
     const action = event.nativeEvent.actionName;
-    if (action === 'activate') toggleExpanded();
+    if (action === 'activate') onOpenDetails();
     else if (action === 'seen') flyOut('seen');
     else if (action === 'notSeen') flyOut('not_seen');
     else if (action === 'want') flyOut('want');
   }
 
-  const overview = movie.overview.trim() || t('card.noOverview');
   const seenStamp = useStampVisibility(translateX, translateY, 'seen', limits);
   const notSeenStamp = useStampVisibility(translateX, translateY, 'not_seen', limits);
   const wantStamp = useStampVisibility(translateX, translateY, 'want', limits);
@@ -184,9 +190,8 @@ export function SwipeCard({ movie, interactive, enterFrom, onDecide, ref }: Swip
         accessibilityElementsHidden={!interactive}
         importantForAccessibility={interactive ? 'yes' : 'no-hide-descendants'}
         accessibilityRole="button"
-        accessibilityLabel={expanded ? `${description}. ${overview}` : description}
-        accessibilityHint={expanded ? t('card.hideOverview') : t('card.showOverview')}
-        accessibilityState={{ expanded }}
+        accessibilityLabel={description}
+        accessibilityHint={t('card.detailsHint')}
         accessibilityActions={[
           { name: 'activate' },
           { name: 'seen', label: t('deck.seen') },
@@ -195,7 +200,7 @@ export function SwipeCard({ movie, interactive, enterFrom, onDecide, ref }: Swip
         ]}
         onAccessibilityAction={onAccessibilityAction}
       >
-        <MovieCard {...movie} expanded={expanded} />
+        <MovieCard {...movie} />
         <Stamp
           label="stamp.seen"
           color="accent"
