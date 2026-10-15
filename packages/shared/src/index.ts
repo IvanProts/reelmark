@@ -1,4 +1,5 @@
 export * from './auth.js';
+export * from './details.js';
 export * from './library.js';
 export * from './movies.js';
 
